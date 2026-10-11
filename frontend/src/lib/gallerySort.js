@@ -11,7 +11,7 @@ export function dateFromFilename(filename = '') {
   return date.getTime()
 }
 
-export function sortGalleryFiles(files, order = 'date-asc') {
+export function sortGalleryFiles(files, order = 'upload') {
   const name = file => file.originalname || file.filename || ''
   const date = file => {
     for (const value of [file.capturedAt, dateFromFilename(name(file)), file.lastModified, file.uploadedAt, file.createdAt, file.timestamp]) {
@@ -23,6 +23,14 @@ export function sortGalleryFiles(files, order = 'date-asc') {
   }
   const compareName = (a, b) => name(a).localeCompare(name(b), 'de', { numeric: true, sensitivity: 'base' })
   return [...files].sort((a, b) => {
+    if (order === 'upload') {
+      const position = file => Number.isSafeInteger(file.uploadPosition) && file.uploadPosition >= 0
+        ? file.uploadPosition : null
+      const aPosition = position(a), bPosition = position(b)
+      if (aPosition !== null && bPosition !== null) return aPosition - bPosition || (Number(a.id) || 0) - (Number(b.id) || 0)
+      if (aPosition !== bPosition) return aPosition === null ? -1 : 1
+      return (Number(a.id) || 0) - (Number(b.id) || 0)
+    }
     if (order.startsWith('name-')) return (order === 'name-desc' ? -1 : 1) * compareName(a, b)
     const aDate = date(a), bDate = date(b)
     // For undated originals, natural names preserve camera sequences more

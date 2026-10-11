@@ -287,7 +287,14 @@ sortierte Dateiliste, auch wenn in der Übersicht erst 90 Karten sichtbar sind.
 Video-Statusabfragen und Wiedergabe werden beim Folienwechsel beendet; nur die
 aktive Video-Folie bekommt eine MP4-Quelle. Videos starten ohne Autoplay.
 
-Die Galerie zeigt Medien standardmäßig nach Datum aufsteigend. Datumsangaben in
+Die Galerie zeigt Medien standardmäßig in der Reihenfolge der vom Browser beim
+Upload übergebenen Dateiauswahl. `uploadPosition` speichert diese Reihenfolge
+unabhängig davon, welche parallelen Uploads zuerst fertig werden. Die Sortierung
+im Ordnerfenster wird vom Browser nicht immer übernommen. Bei alten Uploads ohne
+gespeicherte Position gilt die Registrierungsreihenfolge; ihre ursprüngliche
+Auswahlreihenfolge lässt sich nicht rekonstruieren.
+
+Die Datumssortierung bleibt optional auswählbar. Datumsangaben in
 Kamera-/Handy-Dateinamen (zum Beispiel `IMG_20261011_143000.jpg` oder
 `IMG-20261011-WA0001.jpg`) haben Vorrang vor Dateiänderungs- und Upload-Datum.
 Damit lassen sich auch ältere Uploads mit solchen Namen ohne erneuten Upload

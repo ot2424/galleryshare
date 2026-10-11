@@ -75,6 +75,7 @@
           <label class="flex items-center gap-2 text-sm text-[var(--muted)]" for="gallery-sort">
             Sortieren nach
             <select id="gallery-sort" v-model="sortOrder" class="rounded-xl border border-[rgba(111,78,55,0.2)] bg-white px-3 py-2 text-[var(--ink)]" @change="visibleCount = 90">
+              <option value="upload">Upload-Reihenfolge</option>
               <option value="date-asc">Datum aufsteigend</option>
               <option value="date-desc">Datum absteigend</option>
               <option value="name-asc">Name A–Z</option>
@@ -199,7 +200,7 @@ function openMedia(file) {
   })
 }
 
-const sortOrder = ref('date-asc')
+const sortOrder = ref('upload')
 const sortedFiles = computed(() => sortGalleryFiles(files.value, sortOrder.value))
 
 const updateTimeDisplay = (ms) => {

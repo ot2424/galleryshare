@@ -303,7 +303,7 @@ const createGallery = async () => {
   uploadAbortController.value = new AbortController()
 
   try {
-    await runWithConcurrency(files.value, DIRECT_UPLOAD_CONCURRENCY, async (file) => {
+    await runWithConcurrency(files.value, DIRECT_UPLOAD_CONCURRENCY, async (file, uploadPosition) => {
       const contentType = file.type || 'application/octet-stream'
       let key
       const reportBytes = bytes => {
@@ -356,7 +356,8 @@ const createGallery = async () => {
           key,
           originalname: file.name,
           sizeBytes: file.size,
-          lastModified: file.lastModified
+          lastModified: file.lastModified,
+          uploadPosition
         })
       })
 

@@ -144,17 +144,18 @@ app.post("/api/multipart/:action", async (req, res) => {
 // ------------------------------------------------------
 app.post("/api/register-file", async (req, res) => {
   try {
-    const { galleryId, key, originalname, sizeBytes, lastModified } = req.body;
+    const { galleryId, key, originalname, sizeBytes, lastModified, uploadPosition } = req.body;
 
     if (!galleryId || !key || !originalname) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
     const inserted = await db.run(
-      `INSERT INTO files (galleryId, filename, originalname, sizeBytes, uploadedAt, lastModified)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO files (galleryId, filename, originalname, sizeBytes, uploadedAt, lastModified, uploadPosition)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [galleryId, key, originalname, Number.isSafeInteger(sizeBytes) && sizeBytes >= 0 ? sizeBytes : 0, Date.now(),
-        Number.isSafeInteger(lastModified) && lastModified > 0 ? lastModified : null]
+        Number.isSafeInteger(lastModified) && lastModified > 0 ? lastModified : null,
+        Number.isSafeInteger(uploadPosition) && uploadPosition >= 0 ? uploadPosition : null]
     );
 
     if (isVideo(originalname)) {

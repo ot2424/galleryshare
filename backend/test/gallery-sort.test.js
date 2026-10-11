@@ -9,7 +9,7 @@ test('date sorting uses file dates, upload fallback, ISO dates and puts undated 
     { id: 2, originalname: 'c.jpg', lastModified: Date.parse('2026-10-01'), uploadedAt: Date.parse('2026-10-04') },
     { id: 1, originalname: 'd.jpg', lastModified: 'invalid', uploadedAt: Date.parse('2026-10-02') }
   ];
-  assert.deepEqual(sortGalleryFiles(files).map(f => f.id), [2, 1, 3, 4]);
+  assert.deepEqual(sortGalleryFiles(files, 'date-asc').map(f => f.id), [2, 1, 3, 4]);
   assert.deepEqual(sortGalleryFiles(files, 'date-desc').map(f => f.id), [3, 1, 2, 4]);
   assert.deepEqual(files.map(f => f.id), [4, 3, 2, 1]);
 });
@@ -22,7 +22,7 @@ test('name sorting respects numbers and works in both directions', () => {
 
 test('legacy files use registration order when dates are unavailable', () => {
   const files = [{ id: 3 }, { id: 1 }, { id: 2 }];
-  assert.deepEqual(sortGalleryFiles(files).map(f => f.id), [1, 2, 3]);
+  assert.deepEqual(sortGalleryFiles(files, 'date-asc').map(f => f.id), [1, 2, 3]);
 });
 
 test('the display limit is applied after sorting the entire gallery by date', () => {
@@ -31,7 +31,7 @@ test('the display limit is applied after sorting the entire gallery by date', ()
     originalname: `IMG${index + 1}.jpg`,
     lastModified: Date.UTC(2026, 0, 120 - index)
   }));
-  const sorted = sortGalleryFiles(files);
+  const sorted = sortGalleryFiles(files, 'date-asc');
   assert.deepEqual(sorted.slice(0, 90).map(file => file.id),
     Array.from({ length: 90 }, (_, index) => 120 - index));
   assert.deepEqual(sorted.slice(0, 180).map(file => file.id),
@@ -47,7 +47,7 @@ test('existing uploads use dates in camera names before modification or upload d
     { id: 3, originalname: '2026-10-02_09-15-00.jpg', uploadedAt: Date.UTC(2026, 9, 4) },
     { id: 4, originalname: 'IMG_20261003_091530.jpg' }
   ];
-  assert.deepEqual(sortGalleryFiles(files).map(file => file.id), [2, 3, 4, 1]);
+  assert.deepEqual(sortGalleryFiles(files, 'date-asc').map(file => file.id), [2, 3, 4, 1]);
   assert.deepEqual(sortGalleryFiles(files, 'date-desc').map(file => file.id), [1, 4, 3, 2]);
 });
 
@@ -60,6 +60,28 @@ test('filename dates reject impossible dates and unrelated camera counters', () 
 
 test('undated camera sequences ignore parallel upload completion order', () => {
   const files = [{ id: 1, originalname: 'IMG_10.jpg' }, { id: 3, originalname: 'IMG_1.jpg' }, { id: 2, originalname: 'IMG_2.jpg' }];
-  assert.deepEqual(sortGalleryFiles(files).map(file => file.id), [3, 2, 1]);
+  assert.deepEqual(sortGalleryFiles(files, 'date-asc').map(file => file.id), [3, 2, 1]);
   assert.deepEqual(sortGalleryFiles(files, 'date-desc').map(file => file.id), [1, 2, 3]);
+});
+
+
+test('default preserves selection order despite dates, names and parallel completion', () => {
+  const files = [
+    { id: 1, uploadPosition: 2, originalname: 'a.jpg', lastModified: 1 },
+    { id: 3, uploadPosition: 0, originalname: 'z.jpg', lastModified: 3 },
+    { id: 2, uploadPosition: 1, originalname: 'b.jpg', lastModified: 2 }
+  ];
+  assert.deepEqual(sortGalleryFiles(files).map(file => file.id), [3, 2, 1]);
+  assert.deepEqual(files.map(file => file.id), [1, 3, 2]);
+});
+
+test('legacy uploads retain registration order and precede positioned uploads', () => {
+  const files = [{ id: 3, uploadPosition: 1 }, { id: 2, uploadPosition: null }, { id: 4, uploadPosition: 0 }, { id: 1 }];
+  assert.deepEqual(sortGalleryFiles(files).map(file => file.id), [1, 2, 4, 3]);
+});
+
+test('upload ordering applies to the entire gallery before the display limit', () => {
+  const files = Array.from({ length: 120 }, (_, index) => ({ id: index + 1, uploadPosition: 119 - index }));
+  assert.deepEqual(sortGalleryFiles(files).slice(0, 90).map(file => file.uploadPosition),
+    Array.from({ length: 90 }, (_, index) => index));
 });

@@ -86,8 +86,8 @@ router.post("/:galleryId", async (req, res) => {
     console.log(`Alle Dateien lokal gespeichert (${savedFiles.length})`);
 
     try {
-      await runWithConcurrency(savedFiles, PROCESS_CONCURRENCY, async (file) => {
-        await processUploadedFile({ db, file, galleryId, localFolder });
+      await runWithConcurrency(savedFiles, PROCESS_CONCURRENCY, async (file, uploadPosition) => {
+        await processUploadedFile({ db, file, galleryId, localFolder, uploadPosition });
       });
 
       await db.run(
@@ -111,7 +111,7 @@ router.post("/:galleryId", async (req, res) => {
 
 export default router;
 
-async function processUploadedFile({ db, file, galleryId, localFolder }) {
+async function processUploadedFile({ db, file, galleryId, localFolder, uploadPosition }) {
   const thumbName = `thumb_${file.safeName}.jpg`;
   const thumbPath = path.join(localFolder, thumbName);
   const r2Key = `${galleryId}/${file.safeName}`;
@@ -143,9 +143,9 @@ async function processUploadedFile({ db, file, galleryId, localFolder }) {
   }
 
   await db.run(
-    `INSERT INTO files (galleryId, filename, originalname, thumbnail, downloads, uploadedAt)
-     VALUES (?, ?, ?, ?, 0, ?)`,
-    [galleryId, r2Key, file.originalname, thumbKey, Date.now()]
+    `INSERT INTO files (galleryId, filename, originalname, thumbnail, downloads, uploadedAt, uploadPosition)
+     VALUES (?, ?, ?, ?, 0, ?, ?)`,
+    [galleryId, r2Key, file.originalname, thumbKey, Date.now(), uploadPosition]
   );
 }
 
