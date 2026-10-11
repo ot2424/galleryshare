@@ -48,9 +48,6 @@
 
           <div v-if="files.length" class="soft-card rounded-[1.5rem] p-5 lg:min-w-[22rem]">
             <p class="text-xs font-bold uppercase tracking-[0.24em] text-[var(--accent-strong)]">Download</p>
-            <p class="mt-2 text-sm leading-6 text-[var(--muted)]">
-              Die komplette Galerie kann als ZIP-Datei geladen werden, sobald die Aufbereitung abgeschlossen ist.
-            </p>
             <button
               class="brand-button mt-5 w-full"
               @click="startDownload"
