@@ -33,7 +33,7 @@ export function createZipBuilder({ initDb, getStreamFromR2, uploadZipToBunny }) 
         "SELECT filename, originalname, sizeBytes FROM files WHERE galleryId = ? ORDER BY originalname COLLATE NOCASE",
         [galleryId]
       );
-      if (!files.length) throw new Error("Keine Dateien fuer ZIP");
+      if (!files.length) throw new Error("Keine Dateien für ZIP");
       const space = await fs.promises.statfs(path.dirname(tempZipPath));
       const estimatedSize = files.reduce((sum, file) => sum + (file.sizeBytes || 0), 0);
       if (space.bavail * space.bsize < estimatedSize + 1024 ** 3) {
@@ -122,8 +122,8 @@ async function markZipError(db, galleryId) {
 async function cleanupTempZip(tempZipPath) {
   try {
     await fs.promises.rm(tempZipPath, { force: true });
-    console.log(`Temp ZIP geloescht: ${tempZipPath}`);
+    console.log(`Temp ZIP gelöscht: ${tempZipPath}`);
   } catch (error) {
-    console.error("Fehler beim Loeschen der ZIP:", error);
+    console.error("Fehler beim Löschen der ZIP:", error);
   }
 }

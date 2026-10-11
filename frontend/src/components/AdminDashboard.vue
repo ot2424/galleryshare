@@ -7,7 +7,7 @@
             <span class="eyebrow">Admin Bereich</span>
             <h1 class="mt-5 text-4xl text-[var(--ink)] sm:text-5xl">Galerien verwalten, teilen und sicher wieder schließen.</h1>
             <p cla="mt-4 max-w-2xl text-sm leading-7 text-[var(--muted)] sm:text-base">
-              Dieser Bereich ist auf schnelle Übergabe ausgelegt: neue Galerie anlegen, Upload ueberwachen,
+              Dieser Bereich ist auf schnelle Übergabe ausgelegt: neue Galerie anlegen, Upload überwachen,
               Link teilen und alte Inhalte bei Bedarf entfernen.
             </p>
           </div>
@@ -15,7 +15,7 @@
           <div cla="flex flex-col gap-3 sm:flex-row">
             <button class="brand-button" @click="showCreateModal = true">Neue Galerie erstellen</button>
             <button class="secondary-button border-red-200 text-red-700" @click="nukeEverything">
-              Alles vollstaendig löschen
+              Alles vollständig löschen
             </button>
           </div>
         </div>
@@ -41,7 +41,7 @@
 
       <section class="mt-8">
         <div class="mb-4 flex items-center justify-between">
-          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--accent-strong)]">Galerieuebersicht</p>
+          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--accent-strong)]">Galerieübersicht</p>
           <p v-if="loading" class="text-sm text-[var(--muted)]">Lade Galerien...</p>
         </div>
 
@@ -67,7 +67,7 @@
             </div>
 
             <div class="mt-5 space-y-3 text-sm text-[var(--muted)]">
-              <p>Gueltig bis: {{ formatDate(g.expiresAt) }}</p>
+              <p>Gültig bis: {{ formatDate(g.expiresAt) }}</p>
               <p>Link: /gallery/{{ g.id }}</p>
             </div>
 
@@ -131,7 +131,7 @@
             @click="fileInput?.click()"
             type="button"
           >
-            <span class="text-lg font-semibold text-[var(--ink)]">Dateien ziehen oder auswaehlen</span>
+            <span class="text-lg font-semibold text-[var(--ink)]">Dateien ziehen oder auswählen</span>
             <span class="mt-2 max-w-md text-sm leading-6 text-[var(--muted)]">
               Bilder und Videos können gemeinsam hochgeladen werden. Die Galerie wird danach automatisch vorbereitet.
             </span>
@@ -145,7 +145,7 @@
           </button>
 
           <div v-if="files.length" class="soft-card rounded-[1.5rem] p-5">
-            <p class="text-sm font-semibold text-[var(--ink)]">Ausgewaehlte Dateien: {{ files.length }}</p>
+            <p class="text-sm font-semibold text-[var(--ink)]">Ausgewählte Dateien: {{ files.length }}</p>
             <p class="mt-1 text-sm text-[var(--muted)]">Gesamtgröße: {{ totalSize }} MB</p>
           </div>
 
@@ -276,7 +276,7 @@ const updateUploadProgress = (uploadedBytes, totalBytes, startTime) => {
 
 const createGallery = async () => {
   if (!files.value.length) {
-    alert('Bitte Dateien auswaehlen')
+    alert('Bitte Dateien auswählen')
     return
   }
 
@@ -373,7 +373,7 @@ const createGallery = async () => {
     })
 
     if (!finalizeRes.ok) {
-      console.warn('finalize-gallery zurueckgegeben:', await finalizeRes.text())
+      console.warn('finalize-gallery zurückgegeben:', await finalizeRes.text())
     }
 
     uploadProgress.value = 100

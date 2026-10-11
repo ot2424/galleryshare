@@ -1,7 +1,7 @@
 <template>
   <div class="rounded-[1.6rem] bg-[rgba(255,251,247,0.86)] p-6 sm:p-7">
     <span class="eyebrow">Admin Login</span>
-    <h1 class="mt-5 text-4xl text-[var(--ink)]">Willkommen zurueck</h1>
+    <h1 class="mt-5 text-4xl text-[var(--ink)]">Willkommen zurück</h1>
     <p class="mt-3 text-sm leading-7 text-[var(--muted)]">
       Melden Sie sich an, um neue Galerien hochzuladen, Links zu teilen und bestehende Inhalte zu verwalten.
     </p>
@@ -25,7 +25,7 @@
       @click="login"
       :disabled="loading"
     >
-      {{ loading ? 'Einloggen...' : 'Login oeffnen' }}
+      {{ loading ? 'Einloggen...' : 'Login öffnen' }}
     </button>
   </div>
 </template>
@@ -59,7 +59,7 @@ const login = async () => {
       emit('loginSuccess')
       router.push('/admin')
     } else {
-      alert('Login fehlgeschlagen. Bitte ueberpruefen Sie Ihre Daten.')
+      alert('Login fehlgeschlagen. Bitte überprüfen Sie Ihre Daten.')
     }
   } catch (err) {
     alert('Serverfehler beim Login.')

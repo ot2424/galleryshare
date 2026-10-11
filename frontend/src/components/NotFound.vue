@@ -4,7 +4,7 @@
       <span class="eyebrow">404</span>
       <h1 class="mt-5 text-5xl text-[var(--ink)] sm:text-6xl">Galerie nicht gefunden</h1>
       <p class="mt-5 text-sm leading-7 text-[var(--muted)] sm:text-base">
-        Dieser Link ist entweder abgelaufen, unvollstaendig oder die Galerie wurde bereits entfernt.
+        Dieser Link ist entweder abgelaufen, unvollständig oder die Galerie wurde bereits entfernt.
       </p>
       <router-link to="/" class="brand-button mt-8">
         Zur Startseite

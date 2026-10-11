@@ -13,7 +13,7 @@ const PROCESS_CONCURRENCY = Number(process.env.UPLOAD_PROCESS_CONCURRENCY || 3);
 
 router.post("/:galleryId", async (req, res) => {
   const { galleryId } = req.params;
-  console.log("Upload gestartet fuer Galerie:", galleryId);
+  console.log("Upload gestartet für Galerie:", galleryId);
 
   const localFolder = path.join(process.env.UPLOAD_TEMP_DIR || path.join(process.cwd(), "temp"), galleryId);
 
@@ -42,7 +42,7 @@ router.post("/:galleryId", async (req, res) => {
     const originalname = info.filename;
 
     if (!originalname) {
-      console.warn("Datei ohne Namen uebersprungen");
+      console.warn("Datei ohne Namen übersprungen");
       fileStream.resume();
       return;
     }
@@ -95,7 +95,7 @@ router.post("/:galleryId", async (req, res) => {
         [galleryId]
       );
 
-      console.log(`Dateien in DB registriert und nach R2 hochgeladen fuer Galerie ${galleryId}`);
+      console.log(`Dateien in DB registriert und nach R2 hochgeladen für Galerie ${galleryId}`);
       return res.json({
         success: true,
         files: savedFiles.map((file) => file.safeName)
@@ -128,7 +128,7 @@ async function processUploadedFile({ db, file, galleryId, localFolder }) {
       thumbKey = `${galleryId}/thumbs/${thumbName}`;
       console.log(`Thumbnail erstellt: ${thumbName}`);
     } catch (error) {
-      console.warn(`Thumbnail konnte nicht erstellt werden fuer ${file.safeName}:`, error.message);
+      console.warn(`Thumbnail konnte nicht erstellt werden für ${file.safeName}:`, error.message);
     }
   }
 

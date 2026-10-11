@@ -14,14 +14,14 @@
         </button>
 
         <span class="eyebrow">Einwilligung</span>
-        <h1 class="mt-5 text-4xl text-[var(--ink)] sm:text-5xl">Bevor die Galerie geoeffnet wird</h1>
+        <h1 class="mt-5 text-4xl text-[var(--ink)] sm:text-5xl">Bevor die Galerie geöffnet wird</h1>
         <p class="mt-5 text-sm leading-7 text-[var(--muted)] sm:text-base">
-          Diese Galerie enthaelt private Medien und ist ausschliesslich fuer Personen gedacht, die den direkten Link
-          erhalten haben. Die Inhalte werden nur voruebergehend bereitgestellt, nicht dauerhaft gespeichert und
-          spaetestens nach 48 Stunden vollstaendig entfernt.
+          Diese Galerie enthält private Medien und ist ausschliesslich für Personen gedacht, die den direkten Link
+          erhalten haben. Die Inhalte werden nur vorübergehend bereitgestellt, nicht dauerhaft gespeichert und
+          spätestens nach 48 Stunden vollständig entfernt.
         </p>
         <p class="mt-4 text-sm leading-7 text-[var(--muted)] sm:text-base">
-          Mit Ihrer Zustimmung bestaetigen Sie, dass Sie diese Hinweise zur Verfuegbarkeit und zum Umgang mit den Daten
+          Mit Ihrer Zustimmung bestätigen Sie, dass Sie diese Hinweise zur Verfügbarkeit und zum Umgang mit den Daten
           gelesen haben.
         </p>
 
@@ -42,7 +42,7 @@
             </h1>
             <p v-else class="mt-5 text-4xl text-[var(--ink)] sm:text-5xl">Galerie wird geladen</p>
             <p v-if="!loading" class="mt-4 max-w-2xl text-sm leading-7 text-[var(--muted)] sm:text-base">
-              Verfuegbar fuer: {{ timeDisplay }}
+              Verfügbar für: {{ timeDisplay }}
             </p>
           </div>
 
@@ -134,7 +134,7 @@
       </section>
 
       <section v-else-if="!loading" class="soft-card mt-6 rounded-[2rem] p-10 text-center">
-        <h2 class="text-3xl text-[var(--ink)]">Keine Medien verfuegbar</h2>
+        <h2 class="text-3xl text-[var(--ink)]">Keine Medien verfügbar</h2>
         <p class="mt-3 text-sm leading-7 text-[var(--muted)]">
           Die Galerie ist leer oder der Link ist bereits abgelaufen.
         </p>
@@ -291,7 +291,7 @@ const acceptPrivacy = () => {
 }
 
 const declinePrivacy = () => {
-  alert('Ohne Zustimmung ist kein Zugriff moeglich.')
+  alert('Ohne Zustimmung ist kein Zugriff möglich.')
 }
 
 onMounted(() => {
