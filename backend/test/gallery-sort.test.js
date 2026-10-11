@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sortGalleryFiles } from '../../frontend/src/lib/gallerySort.js';
+import { sortGalleryFiles, dateFromFilename } from '../../frontend/src/lib/gallerySort.js';
 
 test('date sorting uses file dates, upload fallback, ISO dates and puts undated files last', () => {
   const files = [
@@ -38,4 +38,28 @@ test('the display limit is applied after sorting the entire gallery by date', ()
     Array.from({ length: 120 }, (_, index) => 120 - index));
   assert.deepEqual(sortGalleryFiles(files, 'date-desc').slice(0, 90).map(file => file.id),
     Array.from({ length: 90 }, (_, index) => index + 1));
+});
+
+test('existing uploads use dates in camera names before modification or upload dates', () => {
+  const files = [
+    { id: 1, originalname: 'IMG_20261003_101530.jpg', lastModified: Date.UTC(2026, 9, 1) },
+    { id: 2, originalname: 'IMG-20261001-WA0002.jpg' },
+    { id: 3, originalname: '2026-10-02_09-15-00.jpg', uploadedAt: Date.UTC(2026, 9, 4) },
+    { id: 4, originalname: 'IMG_20261003_091530.jpg' }
+  ];
+  assert.deepEqual(sortGalleryFiles(files).map(file => file.id), [2, 3, 4, 1]);
+  assert.deepEqual(sortGalleryFiles(files, 'date-desc').map(file => file.id), [1, 4, 3, 2]);
+});
+
+test('filename dates reject impossible dates and unrelated camera counters', () => {
+  for (const name of ['IMG_20260230.jpg', 'IMG_20261301.jpg', 'IMG_20261003_251530.jpg', 'IMG_1234.jpg', '1202610034.jpg']) {
+    assert.equal(dateFromFilename(name), null, name);
+  }
+  assert.equal(dateFromFilename('IMG_20240229.jpg'), Date.UTC(2024, 1, 29));
+});
+
+test('undated camera sequences ignore parallel upload completion order', () => {
+  const files = [{ id: 1, originalname: 'IMG_10.jpg' }, { id: 3, originalname: 'IMG_1.jpg' }, { id: 2, originalname: 'IMG_2.jpg' }];
+  assert.deepEqual(sortGalleryFiles(files).map(file => file.id), [3, 2, 1]);
+  assert.deepEqual(sortGalleryFiles(files, 'date-desc').map(file => file.id), [1, 2, 3]);
 });

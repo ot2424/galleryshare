@@ -83,6 +83,9 @@
           </label>
           <p class="text-sm text-[var(--muted)]">{{ sortedFiles.length }} Elemente</p>
         </div>
+        <p v-if="sortOrder.startsWith('date-')" class="mb-4 text-xs text-[var(--muted)]">
+          Datum im Dateinamen, ersatzweise Datei- oder Upload-Datum. Bilder ohne Datum folgen am Ende nach Dateiname.
+        </p>
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <article

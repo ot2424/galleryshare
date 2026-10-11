@@ -287,6 +287,13 @@ sortierte Dateiliste, auch wenn in der Übersicht erst 90 Karten sichtbar sind.
 Video-Statusabfragen und Wiedergabe werden beim Folienwechsel beendet; nur die
 aktive Video-Folie bekommt eine MP4-Quelle. Videos starten ohne Autoplay.
 
+Die Galerie zeigt Medien standardmäßig nach Datum aufsteigend. Datumsangaben in
+Kamera-/Handy-Dateinamen (zum Beispiel `IMG_20261011_143000.jpg` oder
+`IMG-20261011-WA0001.jpg`) haben Vorrang vor Dateiänderungs- und Upload-Datum.
+Damit lassen sich auch ältere Uploads mit solchen Namen ohne erneuten Upload
+sortieren. Fehlen alle Datumsangaben, folgen die Dateien am Ende in natürlicher
+Namensreihenfolge. Das EXIF-Aufnahmedatum wird derzeit nicht ausgelesen.
+
 ZIP-Downloadfehler werden vor dem Setzen der Download-Header geprüft.
 Liefert auch Bunny Storage ein fehlendes oder offensichtlich ungültiges ZIP,
 wird `zipError` gesetzt; die Galerie bietet „ZIP erneut erstellen“ an.
