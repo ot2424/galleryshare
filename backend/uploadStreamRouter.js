@@ -143,9 +143,9 @@ async function processUploadedFile({ db, file, galleryId, localFolder }) {
   }
 
   await db.run(
-    `INSERT INTO files (galleryId, filename, originalname, thumbnail, downloads)
-     VALUES (?, ?, ?, ?, 0)`,
-    [galleryId, r2Key, file.originalname, thumbKey]
+    `INSERT INTO files (galleryId, filename, originalname, thumbnail, downloads, uploadedAt)
+     VALUES (?, ?, ?, ?, 0, ?)`,
+    [galleryId, r2Key, file.originalname, thumbKey, Date.now()]
   );
 }
 

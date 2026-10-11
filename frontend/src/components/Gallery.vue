@@ -71,7 +71,16 @@
       </section>
 
       <section v-else-if="sortedFiles.length" class="mt-6">
-        <div class="mb-4 flex items-center justify-end">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <label class="flex items-center gap-2 text-sm text-[var(--muted)]" for="gallery-sort">
+            Sortieren nach
+            <select id="gallery-sort" v-model="sortOrder" class="rounded-xl border border-[rgba(111,78,55,0.2)] bg-white px-3 py-2 text-[var(--ink)]">
+              <option value="date-asc">Datum aufsteigend</option>
+              <option value="date-desc">Datum absteigend</option>
+              <option value="name-asc">Name A–Z</option>
+              <option value="name-desc">Name Z–A</option>
+            </select>
+          </label>
           <p class="text-sm text-[var(--muted)]">{{ sortedFiles.length }} Elemente</p>
         </div>
 
@@ -138,6 +147,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
 import { Fancybox } from '@fancyapps/ui'
+import { sortGalleryFiles } from '../lib/gallerySort.js'
 import '@fancyapps/ui/dist/fancybox/fancybox.css'
 import { useRouter } from 'vue-router'
 
@@ -159,20 +169,8 @@ const consentGiven = ref(localStorage.getItem('galleryConsent') === '1')
 const isVideo = name => /\.(mp4|webm|ogg|mov|m4v)$/i.test(name || '')
 const videoType = name => /\.webm$/i.test(name) ? 'video/webm' : /\.ogg$/i.test(name) ? 'video/ogg' : /\.mov$/i.test(name) ? 'video/quicktime' : 'video/mp4'
 
-const sortedFiles = computed(() => {
-  return [...files.value].sort((a, b) => {
-    const aDate = a.createdAt || a.uploadedAt || a.timestamp || 0
-    const bDate = b.createdAt || b.uploadedAt || b.timestamp || 0
-
-    if (aDate && bDate && aDate !== bDate) {
-      return aDate - bDate
-    }
-
-    const aName = (a.originalname || a.filename || '').toLowerCase()
-    const bName = (b.originalname || b.filename || '').toLowerCase()
-    return aName.localeCompare(bName, 'de')
-  })
-})
+const sortOrder = ref('date-asc')
+const sortedFiles = computed(() => sortGalleryFiles(files.value, sortOrder.value))
 
 const updateTimeDisplay = (ms) => {
   const minutes = Math.floor(ms / 60000)

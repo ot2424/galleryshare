@@ -341,7 +341,8 @@ const createGallery = async () => {
         body: JSON.stringify({
           galleryId,
           key,
-          originalname: file.name
+          originalname: file.name,
+          lastModified: file.lastModified
         })
       })
 

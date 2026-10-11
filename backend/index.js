@@ -114,16 +114,17 @@ app.post("/api/get-upload-url", async (req, res) => {
 // ------------------------------------------------------
 app.post("/api/register-file", async (req, res) => {
   try {
-    const { galleryId, key, originalname } = req.body;
+    const { galleryId, key, originalname, lastModified } = req.body;
 
     if (!galleryId || !key || !originalname) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
     await db.run(
-      `INSERT INTO files (galleryId, filename, originalname)
-       VALUES (?, ?, ?)`,
-      [galleryId, key, originalname]
+      `INSERT INTO files (galleryId, filename, originalname, uploadedAt, lastModified)
+       VALUES (?, ?, ?, ?, ?)`,
+      [galleryId, key, originalname, Date.now(),
+        Number.isSafeInteger(lastModified) && lastModified > 0 ? lastModified : null]
     );
 
     console.log(`📝 Datei registriert → ${originalname}`);
