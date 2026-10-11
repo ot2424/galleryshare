@@ -1,7 +1,7 @@
 // backend/index.js
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
+import "./env.js";
 import initDb from "./database.js";
 import uploadStreamRouter from "./uploadStreamRouter.js";
 import fs from "fs";
@@ -17,8 +17,6 @@ import {
   getBunnyZipUrl
 } from "./bunny.js";
 
-dotenv.config();
-dotenv.config({ path: "/root/PhotoShare/backend/.env", override: false });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -374,7 +372,7 @@ app.post("/api/register-file", async (req, res) => {
   // ------------------------------------------------------
   // START SERVER
   // ------------------------------------------------------
-  app.listen(PORT, () => console.log(`🚀 Backend läuft auf Port ${PORT}`));
+  app.listen(PORT, process.env.HOST || "127.0.0.1", () => console.log(`🚀 Backend läuft auf Port ${PORT}`));
 };
 
 start();

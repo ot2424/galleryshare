@@ -15,7 +15,7 @@ router.post("/:galleryId", async (req, res) => {
   const { galleryId } = req.params;
   console.log("Upload gestartet fuer Galerie:", galleryId);
 
-  const localFolder = path.join("/root/PhotoShare/backend/temp", galleryId);
+  const localFolder = path.join(process.env.UPLOAD_TEMP_DIR || path.join(process.cwd(), "temp"), galleryId);
 
   try {
     fs.mkdirSync(localFolder, { recursive: true, mode: 0o755 });

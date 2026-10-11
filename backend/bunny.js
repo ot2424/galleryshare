@@ -1,3 +1,4 @@
+import "./env.js";
 // backend/bunny.js
 import fs from "fs";
 import fetch from "node-fetch";

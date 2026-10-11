@@ -51,7 +51,7 @@ Dateien mit Namen wie `Backup`, `copy`, `.save`, `index2.js`, `Gallery.vue22` so
 4. `POST /api/register-file` speichert den R2-Schlüssel und Originalnamen in SQLite.
 5. Nach den Uploads startet `POST /api/finalize-gallery` die ZIP-Erstellung im Hintergrund.
 
-**Der aktuelle Admin-Upload verwendet nicht `/api/upload/:galleryId`.** Diese zusätzliche Multipart-Route speichert Dateien zuerst unter `/root/PhotoShare/backend/temp/<galleryId>`, erzeugt nach Möglichkeit 400 Pixel breite JPEG-Vorschaubilder und lädt beides nach R2. Der direkte Browser-Upload erzeugt über die aktuelle Register-Route keine Thumbnails.
+**Der aktuelle Admin-Upload verwendet nicht `/api/upload/:galleryId`.** Diese zusätzliche Multipart-Route speichert Dateien zuerst unter `backend/temp/<galleryId>`, erzeugt nach Möglichkeit 400 Pixel breite JPEG-Vorschaubilder und lädt beides nach R2. Der direkte Browser-Upload erzeugt über die aktuelle Register-Route keine Thumbnails.
 
 ### ZIP erstellen und Galerie öffnen
 
@@ -71,15 +71,15 @@ Der Cloudflare-Worker unter `R2/zip-worker` ist eine separate Alternative: Er ni
 - Node.js mit Unterstützung für `--env-file` (mindestens 20.6; lokal wurde 20.20.2 verwendet) und npm.
 - Linux für den vollständigen Ablauf mit den vorhandenen festen Dateipfaden.
 - Für echte Uploads und Downloads: R2-Bucket mit passenden Zugangsdaten sowie Bunny Storage/CDN.
-- Schreibrechte für das Backend-Arbeitsverzeichnis, `/root/PhotoShare/backend/temp` und `/tmp`; ausreichend Platz für Upload-Zwischendateien und ZIPs.
+- Schreibrechte für das Backend-Arbeitsverzeichnis, `backend/temp` und `/tmp`; ausreichend Platz für Upload-Zwischendateien und ZIPs.
 
 ```bash
 git clone https://github.com/ot2424/galleryshare.git
 cd galleryshare/backend
 npm ci
-cp .env.example .env
+cp .env.example ../.env
 # .env mit den eigenen Werten ausfüllen
-node --env-file=.env index.js
+node index.js
 ```
 
 Zweites Terminal, aus dem geklonten Repository:
@@ -92,7 +92,7 @@ npm run dev -- --host 127.0.0.1
 
 Frontend: http://127.0.0.1:5173. Backend: Port 3000. Vite leitet `/api` an `http://localhost:3000` weiter. Bei einem anderen Backend-Port muss auch `frontend/vite.config.js` angepasst werden. Die Vite-Konfiguration bindet ohne den obigen Host-Parameter an `0.0.0.0`.
 
-**Backend aus `backend/` starten und `--env-file=.env` verwenden.** SQLite öffnet `./db.sqlite` relativ zum Arbeitsverzeichnis. Außerdem lesen die R2-/Bunny-Module ihre Variablen bereits beim Import. Ein bloßes `node index.js` lädt die lokale `.env` im Einstiegspunkt dafür zu spät; zusätzlich existiert ein fest eingebauter dotenv-Pfad `/root/PhotoShare/backend/.env`.
+**Backend aus `backend/` starten.** SQLite öffnet `./db.sqlite` relativ zum Arbeitsverzeichnis. `backend/env.js` lädt die zentrale `.env` im Repository-Stamm vor den R2-/Bunny-Modulen. Bereits gesetzte Prozessvariablen haben Vorrang. Der Server bindet standardmäßig an `127.0.0.1`; `HOST` kann dies ändern.
 
 Ohne funktionierende Cloud-Zugangsdaten lassen sich Oberfläche und einfache Metadaten-Endpunkte prüfen, aber nicht der gesamte Medienablauf. Ein frischer Start legt eine leere SQLite-Datenbank an; alte Galerien werden nicht automatisch aus R2 rekonstruiert.
 
@@ -103,6 +103,8 @@ Vorlage: `backend/.env.example`. Keine realen Werte in Git speichern oder in Log
 | Variable | Bedeutung |
 | --- | --- |
 | `PORT` | Backend-Port, Standard `3000` |
+| `HOST` | Bind-Adresse, Standard `127.0.0.1` |
+| `UPLOAD_TEMP_DIR` | Optionaler absoluter Pfad für Multipart-Zwischendateien, Standard `backend/temp` |
 | `ADMIN_USERNAME` | Loginname, Standard `admin` |
 | `ADMIN_PASSWORD` | Erforderliches Loginpasswort; kein voreingestelltes Passwort |
 | `ADMIN_SECRET` | Separates Geheimnis für den vollständigen Lösch-Endpunkt |
@@ -128,7 +130,7 @@ npm run build
 
 Die Ausgabe liegt in `frontend/dist`. Das Express-Backend liefert diese Dateien nicht selbst aus. Für einen Linux-Produktionsbetrieb muss ein Webserver das Frontend bereitstellen, bei Vue-Routen auf `index.html` zurückfallen und `/api` an das Backend weiterleiten. Die konkrete Konfiguration des ehemaligen Servers ist nicht enthalten.
 
-`backend/ecosystem.config.cjs` ist eine vorhandene PM2-Konfiguration mit `--env-file=.env`. Falls PM2 installiert ist, aus `backend/` starten:
+`backend/ecosystem.config.cjs` startet `galleryshare-api` mit festem Arbeitsverzeichnis, Port 3000 und der zentralen Root-`.env`. Falls PM2 installiert ist, aus `backend/` starten:
 
 ```bash
 pm2 start ecosystem.config.cjs

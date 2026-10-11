@@ -1,6 +1,5 @@
 // backend/r2.js
-import dotenv from "dotenv";
-dotenv.config({ path: "/root/PhotoShare/backend/.env" });
+import "./env.js";
 
 
 import {
