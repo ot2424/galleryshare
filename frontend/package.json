@@ -1,0 +1,32 @@
+{
+  "name": "hochzeitsmedien",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fancyapps/ui": "^6.0.2",
+    "@tailwindcss/aspect-ratio": "^0.4.2",
+    "fflate": "^0.8.2",
+    "filepond": "^4.32.7",
+    "jszip": "^3.10.1",
+    "photoswipe": "^5.4.4",
+    "streamsaver": "^2.0.6",
+    "uuid": "^11.1.0",
+    "vue": "^3.4.15",
+    "vue-filepond": "^7.0.4",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.8",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^4.1.8",
+    "vite": "^5.2.0"
+  }
+}

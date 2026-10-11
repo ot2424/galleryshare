@@ -1,0 +1,416 @@
+<template>
+  <div class="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 px-4 py-6 sm:p-6 overflow-hidden">
+    <div class="max-w-4xl mx-auto">
+      <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-800 mb-6 text-center">
+        Admin Dashboard
+      </h1>
+
+      <div class="flex justify-center sm:justify-end items-center mb-6 flex-wrap gap-3">
+        <button
+          @click="showCreateModal = true"
+          class="bg-[#d1b584] text-white px-5 py-2 rounded-full hover:shadow-md hover:brightness-110 transition text-sm sm:text-base"
+        >
+          + Neue Galerie
+        </button>
+
+	<button @click="clearR2" class="bg-red-500 text-white px-4 py-2 rounded">
+  		Alles aus R2 löschen
+	</button>
+      </div>
+      <div v-if="loading" class="text-center text-gray-500">Lade Galerien...</div>
+
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div
+          v-for="g in galleries"
+          :key="g.id"
+          class="bg-white shadow-lg rounded-lg p-4 border border-gray-200 flex flex-col justify-between transition hover:scale-[1.02] hover:shadow-xl relative"
+  :class="{
+    'opacity-40 pointer-events-none grayscale': deleting[g.id]
+  }"
+        >
+          <div>
+            <h2 class="text-lg font-bold text-gray-800 mb-1 truncate">
+              {{ g.name || 'Ohne Titel' }}
+            </h2>
+            <p class="text-sm text-gray-600 mb-3">
+              Bilder: {{ g.files.length }}<br />
+              Gültig bis: {{ formatDate(g.expiresAt) }}
+            </p>
+          </div>
+
+          <div class="mt-auto flex flex-col sm:flex-row flex-wrap gap-2">
+            <button
+              @click="viewGallery(g.id)"
+              class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 text-sm w-full sm:w-auto text-center"
+            >
+              Ansehen
+            </button>
+            <button
+              @click="shareGallery(g.id)"
+              class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 text-sm w-full sm:w-auto text-center"
+            >
+              Teilen
+            </button>
+            <button
+              @click="deleteGallery(g.id)"
+              class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 text-sm w-full sm:w-auto text-center"
+            >
+              Löschen
+            </button>
+          </div>
+            <!-- OVERLAY -->
+  <div
+    v-if="deleting[g.id]"
+    class="absolute inset-0 bg-white bg-opacity-70 flex items-center justify-center rounded-lg font-semibold text-gray-700 text-lg"
+  >
+    Wird gelöscht…
+  </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal für neuen Galerie-Upload -->
+    <div
+      v-if="showCreateModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <div
+        class="bg-white rounded-lg shadow-lg w-[90%] max-w-md p-6 space-y-4"
+        @drop.prevent="handleDrop"
+        @dragover.prevent
+      >
+        <h2 class="text-xl font-semibold text-center text-gray-800">Neue Galerie erstellen</h2>
+
+        <input
+          v-model="newGalleryName"
+          placeholder="Galerietitel (optional)"
+          class="w-full border border-gray-300 rounded p-2"
+        />
+
+        <!-- Drag & Drop Bereich -->
+        <div
+          class="border-2 border-dashed border-gray-300 rounded p-4 text-center text-gray-500 cursor-pointer hover:border-[#d1b584] transition"
+          @click="fileInput?.click()"
+        >
+          <p class="mb-2">Dateien hierher ziehen oder klicken zum Auswählen</p>
+          <input
+            type="file"
+            ref="fileInput"
+            class="hidden"
+            multiple
+            @change="handleFiles"
+          />
+        </div>
+
+        <!-- Datei-Infos -->
+        <div v-if="files.length" class="text-sm text-gray-700">
+          <p class="mb-1">Ausgewählte Dateien: {{ files.length }}</p>
+          <p class="mb-1">Gesamtgröße: {{ totalSize }} MB</p>
+        </div>
+
+        <!-- Fortschrittsbalken -->
+        <div v-if="uploading" class="w-full bg-gray-200 rounded h-4 overflow-hidden">
+          <div
+            class="bg-[#d1b584] h-4 transition-all duration-300"
+            :style="{ width: uploadProgress + '%' }"
+          ></div>
+        </div>
+
+	<!-- Verbleibende Zeit -->
+<p v-if="uploading && remainingTime" class="text-sm text-gray-600 text-center">
+  {{ remainingTime }}
+</p>
+
+
+        <!-- Button-Gruppe -->
+<div class="flex justify-between items-center gap-2 pt-2">
+  <button
+    v-if="uploading"
+    @click="cancelUpload"
+    class="text-red-600 hover:underline text-sm"
+  >
+    Upload abbrechen
+  </button>
+
+  <div class="flex justify-end gap-2">
+    <button
+  v-if="!uploading"
+  @click="showCreateModal = false"
+  class="text-gray-500 hover:underline"
+>
+  Abbrechen
+</button>
+
+    <button
+      @click="createGallery"
+      class="bg-[#d1b584] text-white px-4 py-2 rounded hover:shadow-md disabled:opacity-50"
+      :disabled="uploading || files.length === 0"
+    >
+      {{ uploading ? 'Lädt...' : 'Hochladen' }}
+    </button>
+  </div>
+</div>
+
+      </div>
+    </div>
+
+    <!-- Modal: Galerie teilen -->
+    <div
+      v-if="showShareModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto"
+    >
+      <div class="bg-white p-4 sm:p-6 rounded-lg shadow-xl w-[95%] sm:w-full max-w-md">
+        <h2 class="text-lg font-semibold mb-4 text-center">Teilen</h2>
+        <p class="mb-3 text-center break-all text-gray-700">{{ shareUrl }}</p>
+        <img :src="qrCodeUrl" alt="QR Code" class="mx-auto w-40 h-40 mb-4" />
+        <div class="flex justify-center">
+          <button
+            @click="showShareModal = false"
+            class="bg-gray-300 px-5 py-2 rounded hover:bg-gray-400"
+          >
+            Schließen
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+const galleries = ref([])
+const loading = ref(false)
+const showCreateModal = ref(false)
+const showShareModal = ref(false)
+const newGalleryName = ref('')
+const files = ref([])
+const shareUrl = ref('')
+const qrCodeUrl = ref('')
+const uploadProgress = ref(0)
+const uploading = ref(false)
+const fileInput = ref(null)
+const router = useRouter()
+const uploadStartTime = ref(null)
+const remainingTime = ref(null)
+const currentUpload = ref(null)
+
+const deleting = ref({})  // { [galleryId]: true/false }
+
+const fetchGalleries = async () => {
+  loading.value = true
+  const res = await fetch('/api/admin/galleries')
+  galleries.value = await res.json()
+  loading.value = false
+}
+
+const formatDate = (timestamp) => {
+  const date = new Date(timestamp)
+  return date.toLocaleString()
+}
+
+const handleFiles = (e) => {
+  files.value = Array.from(e.target.files)
+}
+
+const handleDrop = (e) => {
+  if (e.dataTransfer.files.length) {
+    files.value = Array.from(e.dataTransfer.files)
+  }
+}
+
+const totalSize = computed(() => {
+  const totalBytes = files.value.reduce((sum, file) => sum + file.size, 0)
+  return (totalBytes / 1024 / 1024).toFixed(2)
+})
+
+const createGallery = async () => {
+  const formData = new FormData();
+
+  // Titel setzen
+  formData.append("galleryName", newGalleryName.value || "Galerie");
+
+  // Dateien korrekt anhängen
+  files.value.forEach(file => {
+    formData.append("files", file);   // <--- ganz wichtig!
+  });
+
+  uploading.value = true;
+  uploadProgress.value = 0;
+
+  try {
+    const response = await uploadWithProgress("/api/upload-stream", formData);
+
+    const result = JSON.parse(response);
+    const galleryId = result.galleryId;
+
+    await fetchGalleries();
+    showCreateModal.value = false;
+    newGalleryName.value = "";
+    files.value = [];
+    uploadProgress.value = 0;
+  } catch (err) {
+    alert("Upload fehlgeschlagen");
+    console.error(err);
+  } finally {
+    uploading.value = false;
+  }
+};
+
+    
+
+
+
+function uploadWithProgress(url, formData) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const speeds = []
+    const etaHistory = []
+    const maxSamples = 8
+    const stabilityWindow = 4
+
+    let uploadStart = Date.now()
+    remainingTime.value = 'Verbleibende Zeit wird berechnet...'
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        uploadProgress.value = Math.round((e.loaded / e.total) * 100)
+
+        const elapsed = (Date.now() - uploadStart) / 1000
+        const currentSpeed = e.loaded / elapsed
+
+        speeds.push(currentSpeed)
+        if (speeds.length > maxSamples) speeds.shift()
+
+        const avgSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length
+        const remainingBytes = e.total - e.loaded
+        const etaSeconds = remainingBytes / avgSpeed
+
+        etaHistory.push(etaSeconds)
+        if (etaHistory.length > stabilityWindow) etaHistory.shift()
+
+        // Prüfen, ob ETA in den letzten Werten monoton sinkt oder gleich bleibt
+        const isStable =
+          etaHistory.length === stabilityWindow &&
+          etaHistory.every((val, i, arr) => i === 0 || val <= arr[i - 1])
+
+        if (isStable) {
+          const mins = Math.floor(etaSeconds / 60)
+          const secs = Math.floor(etaSeconds % 60)
+          remainingTime.value = `${mins}:${secs.toString().padStart(2, '0')}`
+        } else {
+          remainingTime.value = 'Verbleibende Zeit wird berechnet...'
+        }
+      }
+    })
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        uploadProgress.value = 100
+        remainingTime.value = '0:00'
+        resolve(xhr.response)
+      } else {
+        reject(new Error(`Upload fehlgeschlagen mit Status ${xhr.status}`))
+      }
+    }
+
+    xhr.onerror = () => reject(new Error('Upload fehlgeschlagen'))
+    xhr.open('POST', url)
+    xhr.send(formData)
+  })
+}
+
+   
+
+
+   
+const cancelUpload = () => {
+  if (currentUpload.value) {
+    currentUpload.value.abort()
+    uploading.value = false
+    currentUpload.value = null
+    uploadProgress.value = 0
+    remainingTime.value = null
+    alert('Upload abgebrochen')
+  }
+}
+
+
+
+function trackProgress(progressRef) {
+  const xhr = new XMLHttpRequest()
+  const controller = new AbortController()
+  xhr.upload.onprogress = function (e) {
+    if (e.lengthComputable) {
+      progressRef.value = Math.round((e.loaded / e.total) * 100)
+    }
+  }
+  return controller.signal
+}
+
+async function deleteGallery(id) {
+  deleting.value[id] = true
+
+  try {
+    const res = await fetch(`/api/admin/gallery/${id}`, { method: "DELETE" })
+    if (!res.ok) throw new Error("Löschen fehlgeschlagen")
+
+    // Nach erfolgreichem Löschen neu laden
+    await fetchGalleries()
+  } catch (err) {
+    alert("Fehler beim Löschen.")
+    deleting.value[id] = false
+  }
+}
+
+
+
+const shareGallery = (id) => {
+  shareUrl.value = `${window.location.origin}/gallery/${id}`
+  qrCodeUrl.value = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl.value)}`
+  showShareModal.value = true
+}
+
+const viewGallery = (id) => {
+  router.push(`/gallery/${id}`)
+}
+
+
+
+const clearing = ref(false)
+const statusText = ref('')
+const result = ref(null)
+
+const clearR2 = async () => {
+  try {
+    const res = await fetch('/api/admin/clear-r2', {
+      method: 'POST',
+      headers: { 'x-admin-secret': 'Ruya24' }
+    })
+    const result = await res.json()
+
+    if (res.ok) {
+      alert(`✅ ${result.deleted} Objekte gelöscht (inkl. DB-Einträge)`)
+      galleries.value = [] // 🔥 UI sofort leeren
+    } else {
+      alert(`❌ Fehler: ${result.error}`)
+    }
+  } catch (err) {
+    console.error(err)
+    alert('❌ Netzwerkfehler')
+  }
+}
+
+
+
+
+
+onMounted(fetchGalleries)
+</script>
+
+<style scoped>
+button {
+  transition: all 0.2s;
+}
+</style>

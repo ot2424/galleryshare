@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GalleryShare Design Auswahl</title>
+  <style>
+    :root {
+      --bg: #f3ede5;
+      --card: rgba(255, 255, 255, 0.82);
+      --ink: #24160e;
+      --muted: #6e5b4f;
+      --accent: #b87746;
+      --line: rgba(85, 57, 38, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(223, 191, 156, 0.7), transparent 30%),
+        linear-gradient(180deg, #fbf7f2 0%, #eee1d1 100%);
+    }
+
+    .wrap {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 64px;
+    }
+
+    .hero {
+      padding: 36px;
+      border: 1px solid rgba(255,255,255,0.5);
+      border-radius: 32px;
+      background: rgba(255,255,255,0.58);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 28px 80px rgba(75, 43, 22, 0.12);
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    .hero p {
+      max-width: 760px;
+      color: var(--muted);
+      line-height: 1.7;
+      margin: 18px 0 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      margin-top: 28px;
+    }
+
+    .card {
+      overflow: hidden;
+      border-radius: 28px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 48px rgba(66, 43, 28, 0.1);
+    }
+
+    .card img {
+      width: 100%;
+      height: 240px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .card-body {
+      padding: 24px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8f5931;
+      background: rgba(184, 119, 70, 0.12);
+      font-weight: 700;
+    }
+
+    .card-body p {
+      color: var(--muted);
+      line-height: 1.65;
+      margin: 14px 0 20px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 132px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .button-primary {
+      color: white;
+      background: linear-gradient(135deg, #b87746, #8e542c);
+    }
+
+    .button-secondary {
+      color: var(--ink);
+      background: white;
+      border: 1px solid var(--line);
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="tag">3 Design Richtungen</div>
+      <h1 style="margin-top: 18px; font-size: clamp(38px, 7vw, 68px);">Waehle eine Startseite fuer GalleryShare</h1>
+      <p>
+        Diese drei Varianten sind rein statische HTML-Designs ohne Backend, Upload oder Cloud-Abhaengigkeiten.
+        Oeffne die jeweilige Seite im Browser und sag mir danach einfach: Design 1, 2 oder 3.
+      </p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <img src="https://images.pexels.com/photos/307008/pexels-photo-307008.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Design 1 Vorschau" />
+        <div class="card-body">
+          <div class="tag">Design 1</div>
+          <h2 style="margin-top: 16px; font-size: 34px;">Editorial Luxury</h2>
+          <p>
+            Warm, elegant und hochwertig. Ideal, wenn die Plattform wie ein Premium-Fotoraum fuer Hochzeiten und Events wirken soll.
+          </p>
+          <div class="actions">
+            <a class="button button-primary" href="/design-option-1.html">Oeffnen</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <img src="https://images.pexels.com/photos/169198/pexels-photo-169198.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Design 2 Vorschau" />
+        <div class="card-body">
+          <div class="tag">Design 2</div>
+          <h2 style="margin-top: 16px; font-size: 34px;">Cinematic Night</h2>
+          <p>
+            Dunkel, stark und kontrastreich. Gut, wenn das Produkt moderner, kuenstlerischer und etwas dramatischer wirken soll.
+          </p>
+          <div class="actions">
+            <a class="button button-primary" href="/design-option-2.html">Oeffnen</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <img src="https://images.pexels.com/photos/265722/pexels-photo-265722.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Design 3 Vorschau" />
+        <div class="card-body">
+          <div class="tag">Design 3</div>
+          <h2 style="margin-top: 16px; font-size: 34px;">Bright Event Board</h2>
+          <p>
+            Hell, freundlich und sehr zugaenglich. Passt, wenn die Seite offen, schnell und unkompliziert wirken soll.
+          </p>
+          <div class="actions">
+            <a class="button button-primary" href="/design-option-3.html">Oeffnen</a>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,447 @@
+<template>
+  <div class="bg-beige min-h-screen font-sans text-gray-800">
+    <!-- EINWILLIGUNG OVERLAY -->
+    <div
+      v-if="!consentGiven"
+      class="fixed inset-0 z-[9999] flex items-center justify-center
+             bg-black bg-opacity-60 backdrop-blur-sm"
+    >
+      <div
+        class="relative bg-white rounded-2xl shadow-xl w-[95vw] max-w-[600px]
+               px-4 py-6 text-center flex flex-col items-center
+               max-h-[90vh] overflow-y-auto text-sm sm:text-base"
+      >
+        <button
+          @click="declinePrivacy"
+          class="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-xl"
+        >×</button>
+
+        <h2 class="font-semibold text-xl mb-4">Einverständniserklärung</h2>
+
+        <p class="text-gray-700 mb-6 text-justify">
+          Diese Galerie enthält vertrauliche und private Medien, die ausschließlich für die Personen zugänglich sind, die über den direkten Link verfügen. Sie dürfen die bereitgestellten Bilder und Videos für den eigenen persönlichen Gebrauch speichern. Wir selbst speichern diese Daten nicht dauerhaft, nutzen sie nicht weiter und geben sie zu keinem Zeitpunkt an Dritte weiter. Die bereitgestellten Medien werden ausschließlich vorübergehend gespeichert und nach spätestens 48 Stunden automatisch und vollständig gelöscht. Mit Ihrer Zustimmung bestätigen Sie, dass Sie diese Hinweise zur Verfügbarkeit und zum Umgang mit den Daten zur Kenntnis genommen haben.
+        </p>
+
+        <button
+          @click="acceptPrivacy"
+          class="w-full py-2 rounded-full bg-[#d1b584] text-white font-semibold
+                 hover:bg-[#c5a566] transition"
+        >
+          Ich stimme zu
+        </button>
+      </div>
+    </div>
+
+    <!-- 🔽 DOWNLOAD OVERLAY (während ZIP-Download) -->
+    <div
+      v-if="downloading"
+      class="fixed inset-0 z-[9500] flex items-center justify-center
+             bg-black bg-opacity-60 backdrop-blur-sm"
+    >
+      <div
+        class="bg-white rounded-2xl shadow-xl w-[90vw] max-w-[420px]
+               px-5 py-5 text-center flex flex-col items-center space-y-3"
+      >
+        <h3 class="font-semibold text-lg text-gray-800">
+          Download wird vorbereitet…
+        </h3>
+
+        <!-- Progressbar -->
+        <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+          <div
+            class="h-3 rounded-full bg-[#d1b584] transition-all duration-200"
+            :style="{ width: (downloadProgress || 1) + '%' }"
+          ></div>
+        </div>
+
+        <p class="text-sm text-gray-700">
+          {{ downloadProgress }}% heruntergeladen
+        </p>
+
+        <p class="text-xs text-gray-500">
+          <span v-if="speedLabel">Geschwindigkeit: {{ speedLabel }}</span>
+          <span v-if="etaLabel">
+            <span v-if="speedLabel"> · </span>
+            Restzeit: {{ etaLabel }}
+          </span>
+        </p>
+      </div>
+    </div>
+
+    <!-- HAUPTINHALT (nur nach Consent) -->
+    <div v-if="consentGiven" class="p-4 sm:p-6">
+      <!-- TITEL -->
+      <h2
+        v-if="!loading && galleryName"
+        class="text-2xl sm:text-3xl font-serif mb-2"
+      >
+        {{ galleryName }}
+      </h2>
+      <p v-if="!loading" class="text-sm text-gray-600 mb-6">
+        Verfügbar für: {{ timeDisplay }}
+      </p>
+
+      <!-- DOWNLOAD BUTTON -->
+      <div v-if="files.length" class="flex justify-center mb-6">
+        <button
+          @click="startDownload"
+          :disabled="!zipReady || downloading"
+          class="bg-[#d1b584] text-white py-2 px-6 rounded hover:shadow transition
+                 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+        >
+          <span v-if="!zipReady">
+            ZIP wird erstellt… ({{ zipProgress }}%)
+          </span>
+
+          <span v-else-if="downloading">
+            Lade ZIP herunter… {{ downloadProgressLabel }}
+          </span>
+
+          <span v-else>
+            Gesamte Galerie herunterladen (ZIP)
+          </span>
+        </button>
+      </div>
+
+      <!-- GALERIE -->
+      <div v-if="files.length">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div v-for="file in files" :key="file.filename">
+            <!-- VIDEO -->
+            <div v-if="isVideo(file.originalname)">
+              <a
+                :data-fancybox="'gallery'"
+                :data-src="'#video-' + file.filename"
+                data-type="inline"
+              >
+                <video
+                  :src="file.url"
+                  class="w-full h-auto object-cover rounded shadow"
+                  muted
+                  playsinline
+                  preload="metadata"
+                ></video>
+              </a>
+
+              <div :id="'video-' + file.filename" style="display:none;">
+                <video
+                  :src="file.url"
+                  controls
+                  playsinline
+                  style="width:100%;max-height:80vh;"
+                ></video>
+              </div>
+            </div>
+
+            <!-- BILD -->
+            <a v-else :href="file.url" data-fancybox="gallery">
+              <img
+                :src="file.url"
+                loading="lazy"
+                class="w-full h-auto object-cover rounded shadow"
+              />
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <p v-else-if="!loading" class="text-gray-500 mt-4 text-center">
+        Keine Medien verfügbar oder Link abgelaufen.
+      </p>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, nextTick, computed } from 'vue'
+import { Fancybox } from '@fancyapps/ui'
+import '@fancyapps/ui/dist/fancybox/fancybox.css'
+import { useRouter } from 'vue-router'
+import streamSaver from 'streamsaver'
+
+const props = defineProps(['galleryId'])
+const router = useRouter()
+
+// StreamSaver MITM konfigurieren (nur im Browser)
+if (typeof window !== 'undefined') {
+  streamSaver.mitm = window.location.origin + '/streamsaver/mitm.html'
+}
+
+// --- STATE
+const galleryName = ref('')
+const files = ref([])
+const loading = ref(true)
+const zipReady = ref(false)
+const zipProgress = ref(0)
+const downloading = ref(false)
+const timeLeftMs = ref(0)
+const timeDisplay = ref('')
+
+// Consent aus localStorage
+const consentGiven = ref(localStorage.getItem('galleryConsent') === '1')
+
+// Download-Progress
+const downloadProgress = ref(0)
+const downloadedBytes = ref(0)
+const totalBytes = ref(null)
+const downloadSpeedMBs = ref(0)
+const etaSeconds = ref(null)
+
+// --- HELPER
+const isVideo = (name) => /\.(mp4|webm|ogg)$/i.test(name)
+
+const updateTimeDisplay = (ms) => {
+  const minutes = Math.floor(ms / 60000)
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  timeDisplay.value =
+    minutes < 1
+      ? 'unter 1 Minute'
+      : minutes < 60
+        ? `${minutes} Min`
+        : `${hours} Std ${remainingMinutes} Min`
+}
+
+// Labels für Button / Overlay
+const speedLabel = computed(() => {
+  if (!downloadSpeedMBs.value || !isFinite(downloadSpeedMBs.value)) return ''
+  return `${downloadSpeedMBs.value.toFixed(1)} MB/s`
+})
+
+const etaLabel = computed(() => {
+  if (etaSeconds.value == null || !isFinite(etaSeconds.value)) return ''
+  const secs = Math.max(0, Math.round(etaSeconds.value))
+  const mins = Math.floor(secs / 60)
+  const s = secs % 60
+  return `${mins}:${s.toString().padStart(2, '0')}`
+})
+
+const downloadProgressLabel = computed(() => {
+  if (!downloading.value) return ''
+  if (!totalBytes.value || downloadProgress.value === 0) {
+    return 'Vorbereitung…'
+  }
+
+  const parts = [`${downloadProgress.value}%`]
+  if (speedLabel.value) parts.push(speedLabel.value)
+  if (etaLabel.value) parts.push(etaLabel.value)
+  return parts.join(' · ')
+})
+
+// --- ZIP POLLING
+let pollingInterval = null
+const startPolling = () => {
+  if (pollingInterval) clearInterval(pollingInterval)
+
+  pollingInterval = setInterval(async () => {
+    const res = await fetch(`/api/zip-progress/${props.galleryId}`)
+    if (!res.ok) return
+    const data = await res.json()
+
+    zipProgress.value = data.zipProgress || 0
+    zipReady.value = data.zipReady === 1
+
+    if (zipReady.value) {
+      clearInterval(pollingInterval)
+    }
+  }, 2000)
+}
+
+// --- Galerie laden
+const fetchGallery = async () => {
+  try {
+    const res = await fetch(`/api/gallery/${props.galleryId}`)
+    if (res.status >= 400) return router.push('/notfound')
+
+    const data = await res.json()
+
+    galleryName.value = data.gallery?.name
+    files.value = data.files
+    zipReady.value = !!data.gallery?.zipReady
+    zipProgress.value = data.gallery?.zipProgress ?? 0
+
+    timeLeftMs.value = data.gallery.expiresAt - Date.now()
+    updateTimeDisplay(timeLeftMs.value)
+
+    await nextTick()
+    Fancybox.bind('[data-fancybox="gallery"]', {
+      Toolbar: ['zoom', 'close'],
+      Thumbs: false
+    })
+  } finally {
+    loading.value = false
+  }
+}
+
+// --- DOWNLOAD (StreamSaver, mit Fallback)
+async function startDownload () {
+  if (!zipReady.value || downloading.value) {
+    console.log('🚫 Download blockiert: zipReady =', zipReady.value, ', downloading =', downloading.value)
+    return
+  }
+
+  console.log('▶️ DOWNLOAD STARTED')
+  downloading.value = true
+
+  downloadProgress.value = 0
+  downloadedBytes.value = 0
+  totalBytes.value = null
+  downloadSpeedMBs.value = 0
+  etaSeconds.value = null
+
+  const downloadUrl = `/api/download-zip-stream/${props.galleryId}`
+  console.log('🌐 Fetching ZIP stream from:', downloadUrl)
+
+  try {
+    console.log('📡 Sending fetch() request...')
+    const res = await fetch(downloadUrl)
+
+    console.log('📡 Fetch response received:', res.status, res.statusText)
+
+    if (!res.ok) {
+      console.error('❌ Backend returned error:', res.status)
+      throw new Error(`HTTP ${res.status}`)
+    }
+
+    // HEADER LOGGING
+    const sizeHeader =
+      res.headers.get('x-file-size') ||
+      res.headers.get('content-length')
+
+    console.log('📦 Header: x-file-size =', res.headers.get('x-file-size'))
+    console.log('📦 Header: content-length =', res.headers.get('content-length'))
+
+    if (sizeHeader) {
+      totalBytes.value = parseInt(sizeHeader, 10)
+      console.log('📏 Total size parsed:', totalBytes.value, 'bytes')
+    } else {
+      console.warn('⚠️ KEINE Dateigröße im Header gefunden!')
+    }
+
+    // Check für Streams
+    console.log('🔍 Checking stream support... res.body =', res.body)
+    if (!res.body || typeof res.body.getReader !== 'function') {
+      console.warn('❌ Streams NOT supported → fallback triggered')
+      const fallback = await fetch(`/api/download-zip-direct/${props.galleryId}`)
+      console.log('Fallback response:', fallback.status)
+      const blob = await fallback.blob()
+      console.log('📦 Blob erzeugt:', blob.size, 'bytes')
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'gallery.zip'
+      a.click()
+      return
+    }
+
+    console.log('✅ Streams supported — continuing')
+
+    // STREAMSAVER INITIALISIERUNG
+    if (!streamSaver || !streamSaver.createWriteStream) {
+      console.error('❌ StreamSaver nicht geladen!')
+      return
+    }
+
+    console.log('📝 Creating StreamSaver write stream...')
+
+    const fileName = (galleryName.value || 'Galerie') + '.zip'
+    const fileStream = streamSaver.createWriteStream(
+      fileName,
+      totalBytes.value ? { size: totalBytes.value } : undefined
+    )
+
+    const writer = fileStream.getWriter()
+    const reader = res.body.getReader()
+
+    console.log('🧩 Reader & Writer ready')
+    console.log('▶️ Start reading chunks...')
+
+    let downloaded = 0
+    const startTs = performance.now()
+
+    while (true) {
+      const { done, value } = await reader.read()
+
+      if (done) {
+        console.log('🏁 Reader done — no more chunks')
+        break
+      }
+
+      if (!value) {
+        console.warn('⚠️ Received EMPTY chunk')
+        continue
+      }
+
+      console.log('📥 Chunk received:', value.byteLength, 'bytes')
+
+      await writer.write(value)
+      console.log('✏️ Chunk written to StreamSaver')
+
+      downloaded += value.byteLength
+      downloadedBytes.value = downloaded
+
+      // Fortschritt
+      if (totalBytes.value) {
+        downloadProgress.value = Math.round((downloaded / totalBytes.value) * 100)
+      }
+
+      console.log(`📊 Progress: ${downloadProgress.value}% (${downloaded}/${totalBytes.value})`)
+
+      // Speed
+      const elapsedSec = (performance.now() - startTs) / 1000
+      if (elapsedSec > 0 && totalBytes.value) {
+        const bps = downloaded / elapsedSec
+        downloadSpeedMBs.value = bps / (1024 * 1024)
+        etaSeconds.value = (totalBytes.value - downloaded) / bps
+      }
+
+      console.log('⚡ Speed:', downloadSpeedMBs.value.toFixed(2), 'MB/s')
+      console.log('⏳ ETA:', etaSeconds.value)
+    }
+
+    console.log('🔐 Closing writer...')
+    await writer.close()
+
+    console.log('🎉 DOWNLOAD COMPLETED SUCCESSFULLY')
+    downloadProgress.value = 100
+  } catch (err) {
+    console.error('❌ DOWNLOAD ERROR:', err)
+    alert('Download fehlgeschlagen.')
+  } finally {
+    console.log('🔚 Download finalisiert — UI reset über Timeout')
+    setTimeout(() => {
+      downloading.value = false
+      downloadProgress.value = 0
+      downloadedBytes.value = 0
+      totalBytes.value = null
+      downloadSpeedMBs.value = 0
+      etaSeconds.value = null
+      console.log('♻️ Download state reset')
+    }, 2000)
+  }
+}
+
+// --- Consent
+const acceptPrivacy = () => {
+  consentGiven.value = true
+  localStorage.setItem('galleryConsent', '1')
+  fetchGallery()
+  startPolling()
+}
+
+const declinePrivacy = () =>
+  alert('Ohne Zustimmung ist der Zugriff nicht möglich.')
+
+onMounted(() => {
+  if (consentGiven.value) {
+    fetchGallery()
+    startPolling()
+  }
+})
+</script>
+
+<style>
+.fancybox__thumbs {
+  display: none !important;
+}
+</style>

@@ -1,0 +1,138 @@
+// backend/createZipInBackground.js
+import archiver from "archiver";
+import fs from "fs";
+import path from "path";
+import initDb from "./database.js";
+import { getStreamFromR2 } from "./r2.js";
+import { uploadZipToBunny } from "./bunny.js";
+
+export default async function createZipInBackground(galleryId) {
+  const db = await initDb();
+
+  console.log(`📦 [ZIP] Starte ZIP-Erstellung für Galerie ${galleryId}`);
+
+  try {
+    // Galerie prüfen
+    const gallery = await db.get(
+      `SELECT * FROM galleries WHERE id = ?`,
+      [galleryId]
+    );
+
+    if (!gallery) {
+      console.error(`❌ [ZIP] Galerie ${galleryId} nicht gefunden.`);
+      return;
+    }
+
+    // Dateien laden
+    const files = await db.all(
+      `SELECT filename, originalname
+       FROM files
+       WHERE galleryId = ?
+       ORDER BY originalname COLLATE NOCASE`,
+      [galleryId]
+    );
+
+    if (!files || files.length === 0) {
+      console.error(`❌ [ZIP] Keine Dateien gefunden für ${galleryId}`);
+      await db.run(
+        `UPDATE galleries SET zipError = 1, zipReady = 0 WHERE id = ?`,
+        [galleryId]
+      );
+      return;
+    }
+
+    const tempZipPath = path.join("/tmp", `${galleryId}.zip`);
+    const output = fs.createWriteStream(tempZipPath);
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    archive.pipe(output);
+
+    // ZIP-Erstellung: 0–90%
+    let processed = 0;
+    const total = files.length;
+
+    for (const f of files) {
+      const stream = await getStreamFromR2(f.filename);
+
+      archive.append(stream, { name: f.originalname });
+
+      processed++;
+
+      const progress = Math.round((processed / total) * 90); // max 90%
+
+      await db.run(
+        `UPDATE galleries SET zipProgress = ? WHERE id = ?`,
+        [progress, galleryId]
+      );
+
+      console.log(`📦 [ZIP] ${progress}% für Galerie ${galleryId}`);
+    }
+
+    // ZIP schließen
+    await archive.finalize();
+    await new Promise((resolve) => output.on("close", resolve));
+
+    console.log(`📦 [ZIP] Fertig erstellt → ${tempZipPath}`);
+
+    // -------------- Upload: 90% -> 100% --------------
+    let uploadProgress = 90;
+    let uploadFinished = false;
+
+    // Fortschritt smooth simulieren während Upload läuft
+    const interval = setInterval(async () => {
+      if (uploadProgress < 99 && !uploadFinished) {
+        uploadProgress++;
+        await db.run(
+          `UPDATE galleries SET zipProgress = ? WHERE id = ?`,
+          [uploadProgress, galleryId]
+        );
+      }
+    }, 400); // alle 400ms 1%
+
+    const uploadSuccess = await uploadZipToBunny(galleryId, tempZipPath)
+      .catch(() => false);
+
+    uploadFinished = true;
+    clearInterval(interval);
+
+    if (!uploadSuccess) {
+      console.error(`❌ [ZIP] Upload zu Bunny fehlgeschlagen für ${galleryId}`);
+
+      await db.run(
+        `UPDATE galleries SET zipError = 1, zipReady = 0 WHERE id = ?`,
+        [galleryId]
+      );
+
+      // Cleanup
+      try { fs.unlinkSync(tempZipPath); } catch (_) {}
+
+      return;
+    }
+
+    // Upload erfolgreich → 100%
+    await db.run(
+      `UPDATE galleries
+       SET zipReady = 1, zipError = 0, zipProgress = 100
+       WHERE id = ?`,
+      [galleryId]
+    );
+
+    console.log(`🎉 [ZIP] Upload fertig → Galerie ${galleryId}`);
+
+    // Cleanup Temp ZIP
+    try {
+      fs.unlinkSync(tempZipPath);
+      console.log(`🧹 Temp ZIP gelöscht: ${tempZipPath}`);
+    } catch (e) {
+      console.warn("⚠️ Temp ZIP konnte nicht gelöscht werden:", e);
+    }
+
+  } catch (err) {
+    console.error(`❌ [ZIP] Fehler bei Galerie ${galleryId}:`, err);
+
+    await db.run(
+      `UPDATE galleries SET zipError = 1, zipReady = 0 WHERE id = ?`,
+      [galleryId]
+    );
+  }
+}

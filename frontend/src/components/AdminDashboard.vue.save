@@ -1,0 +1,451 @@
+<template>
+  <div class="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 px-4 py-6 sm:p-6 overflow-hidden">
+    <div class="max-w-4xl mx-auto">
+      <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-800 mb-6 text-center">
+        Admin Dashboard
+      </h1>
+
+      <div class="flex justify-center sm:justify-end items-center mb-6 flex-wrap gap-3">
+        <button
+          @click="showCreateModal = true"
+          class="bg-[#d1b584] text-white px-5 py-2 rounded-full hover:shadow-md hover:brightness-110 transition text-sm sm:text-base"
+        >
+          + Neue Galerie
+        </button>
+
+        <button @click="clearR2" class="bg-red-500 text-white px-4 py-2 rounded">
+          Alles aus R2 löschen
+        </button>
+      </div>
+
+      <div v-if="loading" class="text-center text-gray-500">Lade Galerien...</div>
+
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div
+          v-for="g in galleries"
+          :key="g.id"
+          class="bg-white shadow-lg rounded-lg p-4 border border-gray-200 flex flex-col justify-between transition hover:scale-[1.02] hover:shadow-xl relative"
+          :class="{
+            'opacity-40 grayscale pointer-events-none': deleting[g.id]
+          }"
+        >
+          <div>
+            <h2 class="text-lg font-bold text-gray-800 mb-1 truncate">
+              {{ g.name || 'Ohne Titel' }}
+            </h2>
+            <p class="text-sm text-gray-600 mb-3">
+              Bilder: {{ g.files.length }}<br />
+              Gültig bis: {{ formatDate(g.expiresAt) }}
+            </p>
+          </div>
+
+          <div class="mt-auto flex flex-col sm:flex-row flex-wrap gap-2">
+            <button
+              @click="viewGallery(g.id)"
+              class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 text-sm w-full sm:w-auto text-center"
+            >
+              Ansehen
+            </button>
+            <button
+              @click="shareGallery(g.id)"
+              class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 text-sm w-full sm:w-auto text-center"
+            >
+              Teilen
+            </button>
+            <button
+              @click="deleteGallery(g.id)"
+              class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 text-sm w-full sm:w-auto text-center"
+            >
+              Löschen
+            </button>
+          </div>
+
+          <div
+            v-if="deleting[g.id]"
+            class="absolute inset-0 bg-white bg-opacity-70 flex flex-col items-center justify-center rounded-lg"
+          >
+            <div class="animate-pulse text-gray-700 font-semibold mb-1">
+              Wird gelöscht...
+            </div>
+            <div class="text-xs text-gray-500">
+              Dateien werden aus der Cloud entfernt
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal für neuen Galerie-Upload -->
+    <div
+      v-if="showCreateModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <div
+        class="bg-white rounded-lg shadow-lg w-[90%] max-w-md p-6 space-y-4"
+        @drop.prevent="handleDrop"
+        @dragover.prevent
+      >
+        <h2 class="text-xl font-semibold text-center text-gray-800">Neue Galerie erstellen</h2>
+
+        <input
+          v-model="newGalleryName"
+          placeholder="Galerietitel (optional)"
+          class="w-full border border-gray-300 rounded p-2"
+        />
+
+        <div
+          class="border-2 border-dashed border-gray-300 rounded p-4 text-center text-gray-500 cursor-pointer hover:border-[#d1b584] transition"
+          @click="fileInput?.click()"
+        >
+          <p class="mb-2">Dateien hierher ziehen oder klicken zum Auswählen</p>
+          <input
+            type="file"
+            ref="fileInput"
+            class="hidden"
+            multiple
+            @change="handleFiles"
+          />
+        </div>
+
+        <div v-if="files.length" class="text-sm text-gray-700">
+          <p class="mb-1">Ausgewählte Dateien: {{ files.length }}</p>
+          <p class="mb-1">Gesamtgröße: {{ totalSize }} MB</p>
+        </div>
+
+        <div v-if="uploading" class="w-full bg-gray-200 rounded h-4 overflow-hidden">
+          <div
+            class="bg-[#d1b584] h-4 transition-all duration-300"
+            :style="{ width: uploadProgress + '%' }"
+          ></div>
+        </div>
+
+        <p v-if="uploading && remainingTime" class="text-sm text-gray-600 text-center">
+          {{ remainingTime }}
+        </p>
+
+        <div class="flex justify-between items-center gap-2 pt-2">
+          <button
+            v-if="uploading"
+            @click="cancelUpload"
+            class="text-red-600 hover:underline text-sm"
+          >
+            Upload abbrechen
+          </button>
+
+          <div class="flex justify-end gap-2">
+            <button
+              v-if="!uploading"
+              @click="showCreateModal = false"
+              class="text-gray-500 hover:underline"
+            >
+              Abbrechen
+            </button>
+
+            <button
+              @click="createGallery"
+              class="bg-[#d1b584] text-white px-4 py-2 rounded hover:shadow-md disabled:opacity-50"
+              :disabled="uploading || files.length === 0"
+            >
+              {{ uploading ? 'Lädt...' : 'Hochladen' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Galerie teilen -->
+    <div
+      v-if="showShareModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto"
+    >
+      <div class="bg-white p-4 sm:p-6 rounded-lg shadow-xl w-[95%] sm:w-full max-w-md">
+        <h2 class="text-lg font-semibold mb-4 text-center">Teilen</h2>
+        <p class="mb-3 text-center break-all text-gray-700">{{ shareUrl }}</p>
+        <img :src="qrCodeUrl" alt="QR Code" class="mx-auto w-40 h-40 mb-4" />
+        <div class="flex justify-center">
+          <button
+            @click="showShareModal = false"
+            class="bg-gray-300 px-5 py-2 rounded hover:bg-gray-400"
+          >
+            Schließen
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, computed } from "vue";
+import { useRouter } from "vue-router";
+
+const galleries = ref([]);
+const loading = ref(false);
+const showCreateModal = ref(false);
+const showShareModal = ref(false);
+const newGalleryName = ref("");
+const files = ref([]);
+const shareUrl = ref("");
+const qrCodeUrl = ref("");
+const uploadProgress = ref(0);
+const uploading = ref(false);
+const fileInput = ref(null);
+const remainingTime = ref(null);
+const currentUpload = ref(null);
+const deleting = ref({});
+
+const router = useRouter();
+
+const fetchGalleries = async () => {
+  loading.value = true;
+  const res = await fetch("/api/admin/galleries");
+  galleries.value = await res.json();
+  loading.value = false;
+};
+
+const formatDate = (timestamp) => {
+  const date = new Date(timestamp);
+  return date.toLocaleString();
+};
+
+const handleFiles = (e) => {
+  files.value = Array.from(e.target.files);
+};
+
+const handleDrop = (e) => {
+  if (e.dataTransfer.files.length) {
+    files.value = Array.from(e.dataTransfer.files);
+  }
+};
+
+const totalSize = computed(() => {
+  const totalBytes = files.value.reduce((sum, f) => sum + f.size, 0);
+  return (totalBytes / 1024 / 1024).toFixed(2);
+});
+
+function uploadToPresignedUrl(uploadUrl, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    currentUpload.value = xhr;
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable && typeof onProgress === "function") {
+        onProgress(e.loaded, e.total);
+      }
+    });
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`Upload fehlgeschlagen: ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Upload fehlgeschlagen"));
+    xhr.onabort = () => reject(new Error("Upload abgebrochen"));
+
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader(
+      "Content-Type",
+      file.type || "application/octet-stream"
+    );
+    xhr.send(file);
+  });
+}
+
+const createGallery = async () => {
+  if (!files.value.length) {
+    alert("Bitte Dateien auswählen");
+    return;
+  }
+
+  uploading.value = true;
+  uploadProgress.value = 0;
+  remainingTime.value = "Berechne...";
+
+  try {
+    // 1) Galerie anlegen
+    const createRes = await fetch("/api/create-gallery", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newGalleryName.value || "Galerie" }),
+    });
+
+    if (!createRes.ok) {
+      throw new Error("Galerie konnte nicht erstellt werden");
+    }
+
+    const { galleryId } = await createRes.json();
+
+    // 2) ZUERST: alle Dateien EINZELN lokal zum Backend schicken
+    //    → /api/upload/:galleryId
+    for (const file of files.value) {
+      const formData = new FormData();
+      formData.append("files", file); // Feldname 'files' passt zu Busboy
+
+      const localRes = await fetch(`/api/upload/${galleryId}`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const localJson = await localRes.json();
+
+      if (!localRes.ok || !localJson.success) {
+        console.error("Lokaler Upload Fehler:", localJson);
+        throw new Error("Lokales Speichern fehlgeschlagen");
+      }
+    }
+
+    console.log("📁 Alle Dateien lokal gespeichert");
+    
+
+    
+    // 3) DANN: Upload zu R2 (wieder einzeln, mit Progress)
+    let uploadedBytes = 0;
+    const totalBytes = files.value.reduce((sum, f) => sum + f.size, 0);
+    const startTime = Date.now();
+
+    for (const file of files.value) {
+      // Presigned URL holen
+      const presignRes = await fetch("/api/get-upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          galleryId,
+          filename: file.name,
+          contentType: file.type || "application/octet-stream",
+        }),
+      });
+
+      if (!presignRes.ok) {
+        throw new Error("Fehler beim Erzeugen der Upload-URL");
+      }
+
+      const { uploadUrl, key } = await presignRes.json();
+
+      // Upload zu R2
+      await uploadToPresignedUrl(uploadUrl, file, (loadedOfFile) => {
+        const currentTotalLoaded = uploadedBytes + loadedOfFile;
+        uploadProgress.value = Math.round(
+          (currentTotalLoaded / totalBytes) * 100
+        );
+
+        const elapsed = (Date.now() - startTime) / 1000;
+        if (elapsed > 0 && currentTotalLoaded > 0) {
+          const speed = currentTotalLoaded / elapsed;
+          const remaining = totalBytes - currentTotalLoaded;
+          const eta = remaining / speed;
+          const mins = Math.floor(eta / 60);
+          const secs = Math.floor(eta % 60);
+          remainingTime.value = `${mins}:${secs
+            .toString()
+            .padStart(2, "0")}`;
+        }
+      });
+
+      uploadedBytes += file.size;
+
+      // In DB registrieren (nur R2-Key, keine lokalen Pfade!)
+      const regRes = await fetch("/api/register-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          galleryId,
+          key,
+          originalname: file.name,
+        }),
+      });
+
+      if (!regRes.ok) {
+        throw new Error("Fehler beim Registrieren der Datei");
+      }
+    }
+
+    // 4) ZIP-Erstellung starten (arbeitet auf den lokalen Files)
+    await fetch("/api/finalize-gallery", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ galleryId }),
+    });
+
+    // UI reset
+    await fetchGalleries();
+    showCreateModal.value = false;
+    newGalleryName.value = "";
+    files.value = [];
+    uploadProgress.value = 100;
+    remainingTime.value = "0:00";
+  } catch (err) {
+    console.error(err);
+    alert("Upload fehlgeschlagen");
+  } finally {
+    uploading.value = false;
+    currentUpload.value = null;
+  }
+};
+
+const cancelUpload = () => {
+  if (currentUpload.value) {
+    currentUpload.value.abort();
+  }
+  uploading.value = false;
+  uploadProgress.value = 0;
+  remainingTime.value = null;
+};
+
+const deleteGallery = async (id) => {
+  deleting.value = { ...deleting.value, [id]: true };
+
+  try {
+    const res = await fetch(`/api/admin/gallery/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Fehler beim Löschen");
+
+    galleries.value = galleries.value.filter((g) => g.id !== id);
+  } catch (err) {
+    alert("Fehler beim Löschen");
+  } finally {
+    deleting.value = { ...deleting.value, [id]: false };
+  }
+};
+
+const shareGallery = (id) => {
+  shareUrl.value = `${window.location.origin}/gallery/${id}`;
+  qrCodeUrl.value = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+    shareUrl.value
+  )}`;
+  showShareModal.value = true;
+};
+
+const viewGallery = (id) => {
+  router.push(`/gallery/${id}`);
+};
+
+const clearR2 = async () => {
+  try {
+    const res = await fetch("/api/admin/clear-r2", {
+      method: "POST",
+      headers: { "x-admin-secret": "Ruya24" },
+    });
+
+    const result = await res.json();
+
+    if (res.ok) {
+      alert(`Gelöscht: ${result.deleted} Objekte`);
+      galleries.value = [];
+    }
+  } catch (err) {
+    alert("Fehler beim Löschen");
+  }
+};
+
+onMounted(fetchGalleries);
+</script>
+
+
+
+<style scoped>
+button {
+  transition: all 0.2s;
+}
+</style>

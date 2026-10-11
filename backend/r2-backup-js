@@ -1,0 +1,131 @@
+import {
+  S3Client,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand
+} from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import dotenv from 'dotenv'
+import fs from 'fs'
+
+dotenv.config()
+
+// ✅ R2-Client
+export const r2 = new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY,
+    secretAccessKey: process.env.R2_SECRET_KEY
+  },
+  forcePathStyle: true,
+  defaultsMode: 'legacy'
+})
+
+// ✅ Multipart-Upload (für große Dateien)
+export async function uploadZipMultipart(zipPath, key) {
+  if (!key) throw new Error("❌ uploadZipMultipart() ohne gültigen Key aufgerufen!")
+
+  const MB5 = 5 * 1024 * 1024
+  const fileSize = fs.statSync(zipPath).size
+  const fileStream = fs.createReadStream(zipPath, { highWaterMark: MB5 })
+
+  console.log(`📤 Starte Multipart-Upload → ${key} (${(fileSize / 1024 / 1024).toFixed(2)} MB)`)
+
+  const create = await r2.send(new CreateMultipartUploadCommand({
+    Bucket: process.env.R2_BUCKET,
+    Key: key,
+    ContentType: 'application/zip'
+  }))
+
+  const uploadId = create.UploadId
+  const parts = []
+  let partNumber = 1
+
+  for await (const chunk of fileStream) {
+    const upload = await r2.send(new UploadPartCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      PartNumber: partNumber,
+      UploadId: uploadId,
+      Body: chunk
+    }))
+    const progress = ((partNumber * MB5) / fileSize * 100).toFixed(1)
+    console.log(`📈 Teil ${partNumber} hochgeladen (${progress}%)`)
+    parts.push({ ETag: upload.ETag, PartNumber: partNumber })
+    partNumber++
+  }
+
+  await r2.send(new CompleteMultipartUploadCommand({
+    Bucket: process.env.R2_BUCKET,
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: { Parts: parts }
+  }))
+
+  console.log(`✅ Multipart ZIP Upload abgeschlossen: ${key}`)
+}
+
+// ✅ Normaler Upload
+export const uploadToR2 = async (body, key, mimeType, contentLength, maxRetries = 3) => {
+  if (!key) {
+    console.error("❌ uploadToR2() ohne gültigen Key aufgerufen!")
+    throw new Error("uploadToR2() wurde ohne gültigen Key aufgerufen!")
+  }
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET,
+    Key: key,
+    Body: body,
+    ContentType: mimeType,
+    ContentLength: contentLength
+  })
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`⬆️ Hochladen zu R2 (Versuch ${attempt}) → ${key}, ${contentLength || '?'} Bytes`)
+      await r2.send(command)
+      return key
+    } catch (err) {
+      const code = err?.Code || err?.name || 'UnknownError'
+      const statusCode = err?.$metadata?.httpStatusCode || '?'
+      const retryable = (code?.includes('Internal') || statusCode === 500 || statusCode === 502)
+
+      console.warn(`❌ Fehler beim Upload (Versuch ${attempt}):`, code, `(Status ${statusCode})`)
+      if (attempt === maxRetries || !retryable) throw err
+
+      const delayMs = 1000 * attempt
+      console.log(`⏳ Warte ${delayMs}ms vor erneutem Versuch...`)
+      await new Promise(res => setTimeout(res, delayMs))
+    }
+  }
+}
+
+export const getStreamFromR2 = async (key) => {
+  const command = new GetObjectCommand({
+    Bucket: process.env.R2_BUCKET,
+    Key: key
+  })
+  try {
+    const response = await r2.send(command)
+    return response.Body // Das ist ein ReadableStream
+  } catch (err) {
+    console.error(`❌ Fehler beim Laden von ${key} aus R2:`, err)
+    throw err
+  }
+}
+
+
+// ✅ Hilfsfunktionen
+export const deleteFromR2 = async (key) => {
+  if (!key) return
+  await r2.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }))
+}
+
+export const getSignedR2Url = async (key) => {
+  const command = new GetObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key })
+  return await getSignedUrl(r2, command, { expiresIn: 48 * 60 * 60 }) // 48h gültig
+}

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GalleryShare Design 1</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      color: #20150f;
+      background:
+        radial-gradient(circle at top left, rgba(231, 205, 179, 0.75), transparent 28%),
+        linear-gradient(180deg, #fbf7f2 0%, #f0e3d2 100%);
+    }
+    h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; margin: 0; }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    .nav {
+      position: sticky;
+      top: 18px;
+      z-index: 5;
+      margin: 18px auto 0;
+      padding: 14px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(255,255,255,0.5);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 20px 60px rgba(74, 43, 21, 0.12);
+    }
+    .brand { font-weight: 800; letter-spacing: 0.24em; text-transform: uppercase; font-size: 13px; }
+    .nav-links { display: flex; gap: 28px; color: #6e5a4b; font-size: 14px; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 28px;
+      align-items: center;
+      min-height: calc(100vh - 120px);
+      padding: 42px 0 56px;
+    }
+    .eyebrow {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(184, 118, 70, 0.12);
+      color: #8f582f;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 12px;
+    }
+    .hero-copy h1 { font-size: clamp(48px, 8vw, 88px); line-height: 0.95; margin-top: 18px; }
+    .hero-copy p {
+      color: #675547;
+      line-height: 1.8;
+      font-size: 18px;
+      max-width: 640px;
+      margin: 22px 0 0;
+    }
+    .cta-row { display: flex; gap: 14px; margin-top: 28px; flex-wrap: wrap; }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 22px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 800;
+    }
+    .primary { color: white; background: linear-gradient(135deg, #b87746, #8d552c); box-shadow: 0 18px 36px rgba(141, 85, 44, 0.28); }
+    .secondary { color: #20150f; background: rgba(255,255,255,0.9); border: 1px solid rgba(88,58,39,0.12); }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 28px;
+    }
+    .stat {
+      padding: 18px;
+      border-radius: 26px;
+      background: rgba(255,255,255,0.66);
+      border: 1px solid rgba(88,58,39,0.1);
+      box-shadow: 0 14px 40px rgba(67, 42, 25, 0.08);
+    }
+    .stat strong { display: block; font-size: 30px; margin-bottom: 6px; }
+    .hero-media {
+      position: relative;
+      min-height: 620px;
+      border-radius: 34px;
+      overflow: hidden;
+      box-shadow: 0 30px 80px rgba(55, 31, 16, 0.18);
+    }
+    .hero-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .overlay-card {
+      position: absolute;
+      left: 22px;
+      right: 22px;
+      bottom: 22px;
+      padding: 22px;
+      border-radius: 28px;
+      background: rgba(24, 16, 10, 0.48);
+      backdrop-filter: blur(10px);
+      color: white;
+    }
+    .section {
+      padding: 0 0 72px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .panel {
+      padding: 26px;
+      border-radius: 30px;
+      background: rgba(255,255,255,0.75);
+      border: 1px solid rgba(88,58,39,0.1);
+      box-shadow: 0 18px 42px rgba(69, 41, 22, 0.08);
+    }
+    .gallery-strip {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: 1.4fr 0.8fr 0.8fr;
+      gap: 18px;
+    }
+    .gallery-strip img {
+      width: 100%;
+      height: 320px;
+      object-fit: cover;
+      border-radius: 28px;
+      box-shadow: 0 18px 42px rgba(69, 41, 22, 0.12);
+    }
+    @media (max-width: 920px) {
+      .hero, .grid, .gallery-strip { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+      .stats { grid-template-columns: 1fr; }
+      .hero-media { min-height: 420px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="nav">
+      <div class="brand">GalleryShare</div>
+      <nav class="nav-links">
+        <span>Start</span>
+        <span>Vorteile</span>
+        <span>Galerien</span>
+        <span>Kontakt</span>
+      </nav>
+      <a class="button primary" href="/design-gallery.html">Zur Auswahl</a>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Design 1 · Editorial Luxury</span>
+        <h1>Private Galerien mit einer ruhigen, hochwertigen Wirkung.</h1>
+        <p>
+          Diese Richtung fuehlt sich elegant, warm und premium an. Sie passt gut zu Hochzeiten,
+          Events und professionellen Fotoabgaben, bei denen die Oberflaeche nicht technisch,
+          sondern kuratiert wirken soll.
+        </p>
+        <div class="cta-row">
+          <a class="button primary" href="#">Galerie ansehen</a>
+          <a class="button secondary" href="#">Mehr erfahren</a>
+        </div>
+        <div class="stats">
+          <div class="stat"><strong>48h</strong><span>klare Verfuegbarkeit</span></div>
+          <div class="stat"><strong>ZIP</strong><span>gesammelter Download</span></div>
+          <div class="stat"><strong>QR</strong><span>schnelles Teilen vor Ort</span></div>
+        </div>
+      </div>
+
+      <div class="hero-media">
+        <img src="https://images.pexels.com/photos/307008/pexels-photo-307008.jpeg?auto=compress&cs=tinysrgb&w=1600" alt="Hero Bild" />
+        <div class="overlay-card">
+          <h2 style="font-size: 38px;">Eine Galerie wie ein Magazin-Editorial</h2>
+          <p style="margin: 10px 0 0; color: rgba(255,255,255,0.82); line-height: 1.7;">
+            Warme Farben, grosszuegige Typografie und starke Bildpraesenz statt klassischer Tool-Oberflaeche.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="grid">
+        <article class="panel">
+          <h3 style="font-size: 32px;">Private Freigabe</h3>
+          <p style="line-height: 1.75; color: #6b594a;">Der Fokus liegt auf einer geschlossenen, hochwertigen Medienuebergabe fuer Kunden, Gaeste oder Familien.</p>
+        </article>
+        <article class="panel">
+          <h3 style="font-size: 32px;">Klarer Ablauf</h3>
+          <p style="line-height: 1.75; color: #6b594a;">Upload, Freigabe und Download sind visuell sauber gegliedert und wirken ruhig statt ueberladen.</p>
+        </article>
+        <article class="panel">
+          <h3 style="font-size: 32px;">Premium Bildwirkung</h3>
+          <p style="line-height: 1.75; color: #6b594a;">Grossflaechige Fotos und serif-basierte Headlines geben dem Produkt mehr Wertigkeit.</p>
+        </article>
+      </div>
+
+      <div class="gallery-strip">
+        <img src="https://images.pexels.com/photos/169198/pexels-photo-169198.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Galerie 1" />
+        <img src="https://images.pexels.com/photos/265722/pexels-photo-265722.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Galerie 2" />
+        <img src="https://images.pexels.com/photos/325185/pexels-photo-325185.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Galerie 3" />
+      </div>
+    </section>
+  </div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zip-worker",
+  "main": "src/index.js",
+  "compatibility_date": "2025-11-11",
+
+  // Logging aktivieren
+  "observability": {
+    "enabled": true
+  },
+
+  // 👉 R2-Bucket-Bindung (hier Bucketnamen anpassen!)
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "gallery-media",           // ← DEIN R2 Bucketname
+      "preview_bucket_name": "gallery-media"
+    }
+  ],
+
+  // Optional: Smart Placement kann bei globalem Traffic helfen
+  "placement": { "mode": "smart" }
+}

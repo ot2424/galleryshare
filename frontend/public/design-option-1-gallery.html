@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design 1 Beispiel Galerie</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: "Segoe UI", sans-serif; color: #20150f;
+      background: radial-gradient(circle at top left, rgba(231, 205, 179, 0.75), transparent 28%), linear-gradient(180deg, #fbf7f2 0%, #f0e3d2 100%);
+    }
+    h1, h2, h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding-bottom: 64px; }
+    .top {
+      margin-top: 18px; padding: 18px 22px; border-radius: 999px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+      background: rgba(255,255,255,0.72); border: 1px solid rgba(255,255,255,0.5); backdrop-filter: blur(12px); box-shadow: 0 20px 60px rgba(74, 43, 21, 0.12);
+    }
+    .button { display:inline-flex; align-items:center; justify-content:center; padding:12px 18px; border-radius:999px; text-decoration:none; font-weight:800; }
+    .primary { color:white; background:linear-gradient(135deg, #b87746, #8d552c); }
+    .secondary { color:#20150f; background:white; border:1px solid rgba(88,58,39,0.12); }
+    .hero {
+      margin-top: 22px; border-radius: 34px; overflow: hidden; position: relative; min-height: 520px;
+      box-shadow: 0 30px 80px rgba(55, 31, 16, 0.18);
+    }
+    .hero img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .overlay {
+      position:absolute; inset:auto 22px 22px 22px; padding:24px; border-radius:28px; background:rgba(24, 16, 10, 0.48); backdrop-filter:blur(10px); color:white;
+    }
+    .badge { display:inline-block; padding:8px 12px; border-radius:999px; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; background:rgba(255,255,255,0.14); }
+    .info-grid { display:grid; grid-template-columns: 1fr 320px; gap: 18px; margin-top: 24px; }
+    .panel, .item {
+      padding: 22px; border-radius: 28px; background: rgba(255,255,255,0.78); border: 1px solid rgba(88,58,39,0.1); box-shadow: 0 18px 42px rgba(69, 41, 22, 0.08);
+    }
+    .muted { color:#675547; line-height:1.75; }
+    .gallery-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:18px; margin-top:18px; }
+    .item img { width:100%; height:240px; object-fit:cover; border-radius:22px; display:block; margin-bottom:14px; }
+    @media (max-width: 920px) {
+      .info-grid, .gallery-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="top">
+      <strong style="letter-spacing:0.2em; text-transform:uppercase; font-size:13px;">GalleryShare</strong>
+      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <a class="button secondary" href="/design-option-1.html">Landing</a>
+        <a class="button secondary" href="/design-option-1-admin.html">Admin</a>
+        <a class="button primary" href="/design-gallery.html">Zur Auswahl</a>
+      </div>
+    </div>
+
+    <section class="hero">
+      <img src="https://images.pexels.com/photos/307008/pexels-photo-307008.jpeg?auto=compress&cs=tinysrgb&w=1600" alt="Hero" />
+      <div class="overlay">
+        <div class="badge">Beispiel Galerie · Design 1</div>
+        <h1 style="font-size: clamp(42px, 7vw, 76px); margin-top: 14px;">Hochzeit Sommerabend</h1>
+        <p style="margin: 12px 0 0; color: rgba(255,255,255,0.82); line-height: 1.7; max-width: 760px;">
+          Eine private Galerie mit ruhiger, hochwertiger Bildbuehne. Die Inhalte wirken wie eine kuratierte Strecke
+          statt wie ein Dateiverzeichnis.
+        </p>
+      </div>
+    </section>
+
+    <section class="info-grid">
+      <div class="panel">
+        <h2 style="font-size: 40px;">Elegante Bildpraesentation fuer besondere Momente</h2>
+        <p class="muted" style="margin-top: 14px;">
+          Diese Ansicht setzt auf grosse Fotos, warme Toene und grosszuegige Karten. Sie ist ideal, wenn Besucher das Gefuehl
+          haben sollen, eine edle Fotostrecke anzusehen.
+        </p>
+      </div>
+      <aside class="panel">
+        <h3 style="font-size: 32px;">Galerie Infos</h3>
+        <p class="muted" style="margin-top: 12px;">98 Bilder · 6 Videos</p>
+        <p class="muted">Verfuegbar fuer 23 Std 14 Min</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
+          <a class="button primary" href="#">ZIP Download</a>
+          <a class="button secondary" href="#">QR Teilen</a>
+        </div>
+      </aside>
+    </section>
+
+    <section class="gallery-grid">
+      <article class="item"><img src="https://images.pexels.com/photos/169198/pexels-photo-169198.jpeg?auto=compress&cs=tinysrgb&w=1200" alt=""><h3 style="font-size:30px;">Empfang</h3><p class="muted">Sanfte Lichtstimmung und grosse Bildflaechen.</p></article>
+      <article class="item"><img src="https://images.pexels.com/photos/265722/pexels-photo-265722.jpeg?auto=compress&cs=tinysrgb&w=1200" alt=""><h3 style="font-size:30px;">Portraets</h3><p class="muted">Klar kuratierte Auswahl fuer ein ruhiges Seherlebnis.</p></article>
+      <article class="item"><img src="https://images.pexels.com/photos/325185/pexels-photo-325185.jpeg?auto=compress&cs=tinysrgb&w=1200" alt=""><h3 style="font-size:30px;">Details</h3><p class="muted">Feine Editorial-Optik auch fuer kleine Motive.</p></article>
+      <article class="item"><img src="https://images.pexels.com/photos/307008/pexels-photo-307008.jpeg?auto=compress&cs=tinysrgb&w=1200" alt=""><h3 style="font-size:30px;">Abendlicht</h3><p class="muted">Bilder koennen wie in einer Magazinserie wirken.</p></article>
+      <article class="item"><img src="https://images.pexels.com/photos/169198/pexels-photo-169198.jpeg?auto=compress&cs=tinysrgb&w=1200" alt=""><h3 style="font-size:30px;">Gaeste</h3><p class="muted">Persoenliche Szenen bleiben warm und hochwertig.</p></article>
+      <article class="item"><img src="https://images.pexels.com/photos/265722/pexels-photo-265722.jpeg?auto=compress&cs=tinysrgb&w=1200" alt=""><h3 style="font-size:30px;">Finale</h3><p class="muted">Die Galerie bleibt grosszuegig und elegant lesbar.</p></article>
+    </section>
+  </div>
+</body>
+</html>
