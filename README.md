@@ -51,7 +51,7 @@ Dateien mit Namen wie `Backup`, `copy`, `.save`, `index2.js`, `Gallery.vue22` so
 4. `POST /api/register-file` speichert den R2-Schlüssel und Originalnamen in SQLite.
 5. Nach den Uploads startet `POST /api/finalize-gallery` die ZIP-Erstellung im Hintergrund.
 
-**Der aktuelle Admin-Upload verwendet nicht `/api/upload/:galleryId`.** Diese zusätzliche Multipart-Route speichert Dateien zuerst unter `backend/temp/<galleryId>`, erzeugt nach Möglichkeit 400 Pixel breite JPEG-Vorschaubilder und lädt beides nach R2. Der direkte Browser-Upload erzeugt über die aktuelle Register-Route keine Thumbnails.
+**Der aktuelle Admin-Upload verwendet nicht `/api/upload/:galleryId`.** Diese zusätzliche Multipart-Route speichert Dateien zuerst unter `backend/temp/<galleryId>`, erzeugt nach Möglichkeit 400 Pixel breite JPEG-Vorschaubilder und lädt beides nach R2. Für direkt hochgeladene Bilder erzeugt `mediaPreview.js` beim ersten Vorschauzugriff ein JPEG mit maximal 480 Pixeln und eine Ansicht mit maximal 1600 Pixeln. Beide Varianten werden in R2 gespeichert und in SQLite registriert; bestehende Galerien benötigen keinen erneuten Upload. Die erste Erzeugung benötigt einen Abruf des Originals. Nicht unterstützte Bildformate fallen auf das Original zurück.
 
 ### ZIP erstellen und Galerie öffnen
 
@@ -59,8 +59,8 @@ Dateien mit Namen wie `Backup`, `copy`, `.save`, `index2.js`, `Gallery.vue22` so
 2. Archiver schreibt `/tmp/<galleryId>.zip` ohne Kompression (`store: true`).
 3. Das ZIP wird in Bunny Storage unter `gallery-zips/<galleryId>.zip` hochgeladen.
 4. Die Datenbank erhält `zipReady = 1` und `zipProgress = 100`; das lokale ZIP wird entfernt.
-5. Gäste öffnen `/gallery/<galleryId>`. Die API liefert Metadaten und zeitlich begrenzte R2-GET-URLs; deren Standardlaufzeit beträgt eine Stunde.
-6. Die Galerie fragt `/api/zip-progress/:id` ab. `/api/download-zip/:id` liefert bei fertigem ZIP eine Bunny-CDN-URL, die der Browser öffnet.
+5. Gäste öffnen `/gallery/<galleryId>`. Die API liefert Metadaten und zeitlich begrenzte R2-GET-URLs; deren Laufzeit bis zum Galerieablauf reicht. Die API liefert Vorschau-URLs; die Originaldatei bleibt für Downloads erhalten. Videos werden erst beim Öffnen des Viewers geladen.
+6. Die Galerie fragt `/api/zip-progress/:id` ab. `/api/download-zip/:id` liefert bei fertigem ZIP die eigene Route `/api/download-zip/:id/file`. Diese streamt das Bunny-ZIP mit Download-Headern zum Browser, einschließlich Range-Anfragen. Bei `zipError` bietet die Galerie über `POST /api/retry-zip/:id` einen neuen Versuch an.
 
 Der Cloudflare-Worker unter `R2/zip-worker` ist eine separate Alternative: Er nimmt `?id=...` an und erzeugt/speichert ZIPs in R2. Er ist nicht in den oben beschriebenen Backend-/Bunny-Ablauf eingebunden und wird für den normalen Start nicht benötigt. Nicht ohne Prüfung deployen: Die Wrangler-Konfiguration enthält bereits Bucket-Namen; der Worker puffert Daten im Speicher und berücksichtigt keine weitere List-Paginierung.
 
@@ -152,7 +152,10 @@ Alle Pfade beginnen mit `/api`. Maßgeblich ist `backend/index.js`; Request-Feld
 | `POST /finalize-gallery` | `{ galleryId }`; startet ZIP-Erstellung |
 | `GET /gallery/:id` | Galerie und Dateien mit signierten URLs; 404 bei unbekannter, 410 bei abgelaufener Galerie |
 | `GET /zip-progress/:id` | `zipProgress`, `zipReady`, `zipError` |
-| `GET /download-zip/:id` | Liefert bei fertigem ZIP `{ url }` |
+| `GET /download-zip/:id` | Liefert bei fertigem ZIP `{ url }` zur eigenen Downloadroute |
+| `GET /download-zip/:id/file` | Streamt das ZIP von Bunny mit Download-Headern |
+| `POST /retry-zip/:id` | Startet einen fehlgeschlagenen ZIP-Job erneut |
+| `GET /media/:galleryId/:fileId/:variant` | Erzeugt/cachet Bildvarianten (`thumbnail`, `preview`) und leitet auf R2 um |
 | `GET /admin/galleries` | Alle Galerien einschließlich Dateimetadaten |
 | `DELETE /admin/gallery/:id` | Löscht eine Galerie, zugehörige R2-Objekte und lokale Daten; Bunny-Fehler siehe unten |
 | `POST /admin/nuke` | Löscht alle R2-Objekte, Bunny-ZIPs und Datenbankeinträge; verlangt `x-admin-secret` und `{ confirm: "DELETE_EVERYTHING" }` |
@@ -164,7 +167,7 @@ Der letzte Endpunkt ist destruktiv und kein Test- oder Health-Endpunkt.
 `backend/database.js` öffnet eine gemeinsam verwendete SQLite-Verbindung, aktiviert WAL und legt Tabellen/Indizes beim Start an.
 
 - `galleries`: `id`, `name`, `createdAt`, `expiresAt`, `zipReady`, `zipError`, `zipProgress`, `uploadSuccess`.
-- `files`: `id`, `galleryId`, `filename` (R2-Schlüssel), `originalname`, `downloads`, `thumbnail` (optionaler R2-Schlüssel).
+- `files`: `id`, `galleryId`, `filename` (R2-Schlüssel), `originalname`, `downloads`, `thumbnail` und `preview` (optionale R2-Schlüssel).
 - Zeitwerte sind Unix-Zeit in Millisekunden. Statusfelder sind numerische Flags.
 - Indizes beschleunigen die Suche nach Galerie und Sortierung nach Originalname.
 - Für ältere Datenbanken wird eine fehlende `thumbnail`-Spalte ergänzt. Es gibt kein allgemeines Migrationstool.
@@ -175,10 +178,10 @@ Der letzte Endpunkt ist destruktiv und kein Test- oder Health-Endpunkt.
 Diese Punkte beschreiben den importierten Stand; sie sind durch diese README nicht behoben:
 
 1. **Authentifizierung:** Login erzeugt keine serverseitige Sitzung und kein Token. Der Router prüft nur `localStorage.auth`. Die meisten schreibenden und administrativen Backend-Endpunkte haben keine Authentifizierungs-Middleware. Vor öffentlichem produktivem Betrieb ist eine serverseitige Zugriffskontrolle erforderlich.
-2. **Ablaufzeit:** `/gallery/:id` prüft `expiresAt`; ZIP-URL und ZIP-Fortschritt erzwingen diese Prüfung nicht. Es gibt keinen implementierten automatischen Aufräumjob für abgelaufene Medien. 48 Stunden bedeuten daher keine garantierte Löschung oder vollständige Zugriffssperre.
-3. **Galerie löschen:** `index.js` ruft `deleteZipFromBunny` auf, importiert diese Funktion aber nicht. Der Fehler wird abgefangen; ein Bunny-ZIP kann trotz erfolgreicher Antwort erhalten bleiben.
+2. **Ablaufzeit:** `/gallery/:id` prüft `expiresAt`; ZIP-Downloads und Vorschauzugriffe prüfen ebenfalls den Ablauf; der ZIP-Fortschritt prüft ihn nicht. Es gibt keinen implementierten automatischen Aufräumjob für abgelaufene Medien. 48 Stunden bedeuten daher keine garantierte Löschung oder vollständige Zugriffssperre.
+3. **Galerie löschen:** Fehler beim Löschen von Cloud-Objekten werden teilweise abgefangen; Cloud-Dateien können bei Dienstausfällen erhalten bleiben.
 4. **Upload-Konsistenz:** R2-Upload und SQLite-Registrierung sind separate Schritte. Abbrüche/Fehler können verwaiste Objekte oder unvollständige Galerien hinterlassen. Dateinamen, Schlüssel und Galeriezugehörigkeit benötigen zusätzliche Validierung; wiederholte Namen können dieselben R2-Schlüssel adressieren.
-5. **ZIP-Jobs:** Hintergrundarbeit läuft im API-Prozess ohne dauerhafte Queue oder Wiederaufnahme nach Neustart. Manche Fehlerpfade setzen `zipError` nicht zuverlässig; Stream-Fehlerbehandlung und Bereinigung sind zu prüfen. Fortschritt basiert auf eingereihten Dateien, nicht auf übertragenen Bytes.
+5. **ZIP-Jobs:** Hintergrundarbeit läuft im API-Prozess ohne dauerhafte Queue oder Wiederaufnahme nach Neustart. Stream-Fehler setzen `zipError`; temporäre ZIPs werden auch bei Fehlern bereinigt. Gleichzeitige Jobs derselben Galerie werden zusammengefasst. Fortschritt basiert auf fertig geschriebenen Dateien, nicht auf übertragenen Bytes.
 6. **Lokale Zwischenablage:** Die Multipart-Upload-Route räumt erfolgreich gespeicherte lokale Dateien nicht generell nach Abschluss auf. Speicherbedarf und Bereinigung müssen eingeplant werden.
 7. **Externe Dienste:** QR-Codes werden über `api.qrserver.com` erzeugt; dabei wird der Galerielink an diesen Dienst übergeben. Die Startseite lädt Bilder von Pexels. Bei Datenschutz-/Offline-Anforderungen berücksichtigen.
 8. **Alte Varianten:** Backup-Dateien und der separate Worker sind nicht als vollständiger unterstützter Funktionsumfang getestet.
@@ -195,7 +198,7 @@ Beim lokalen Check am 11.10.2026 wurden bestätigt:
 
 Nicht bestätigt: vollständiger R2-Upload, Bunny-ZIP-Download oder Übereinstimmung mit dem alten Server. Diese Prüfungen bezogen sich auf den lokalen Ausgangsstand, nicht auf einen frisch provisionierten Linux-Server.
 
-Das Backend hat nur ein absichtlich fehlschlagendes Platzhalter-`npm test`; im Frontend ist kein Testskript definiert. Der separate Worker hat ein eigenes Vitest-Skript, das nicht mit einer Testsuite der Hauptanwendung gleichzusetzen ist.
+`npm --prefix backend test` prüft ZIP-Abschluss, parallele Jobaufrufe, R2-Lese-/Streamfehler, fehlgeschlagene ZIP-Uploads mit Wiederholung und gecachte Bildvarianten. Die Speicherdienste werden dabei simuliert; im Frontend ist kein Testskript definiert. Der separate Worker hat ein eigenes Vitest-Skript, das nicht mit einer Testsuite der Hauptanwendung gleichzusetzen ist.
 
 Für kleine Änderungen mindestens die betroffene Syntax und bei Frontend-Änderungen den Build prüfen:
 

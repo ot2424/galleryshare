@@ -25,3 +25,6 @@ Thumbs.db
 *.sqlite
 *.sqlite-*
 backend/db.json
+
+# Local deployment backups
+deploy/backups/

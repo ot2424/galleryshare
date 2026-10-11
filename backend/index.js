@@ -5,6 +5,10 @@ import "./env.js";
 import initDb from "./database.js";
 import uploadStreamRouter from "./uploadStreamRouter.js";
 import fs from "fs";
+import fetch from "node-fetch";
+import { pipeline } from "node:stream/promises";
+import createZipInBackground from "./createZipInBackground.js";
+import { ensurePreview, isPreviewImage } from "./mediaPreview.js";
 import {
   deleteFromR2,
   getSignedR2Url,
@@ -14,6 +18,7 @@ import {
 
 import {
   deleteAllZipsFromBunny,
+  deleteZipFromBunny,
   getBunnyZipUrl
 } from "./bunny.js";
 
@@ -157,19 +162,48 @@ app.post("/api/register-file", async (req, res) => {
         [id]
       );
 
+      const mediaTtl = Math.max(1, Math.ceil((gallery.expiresAt - Date.now()) / 1000));
       const filesWithUrls = await Promise.all(
         files.map(async (f) => ({
           ...f,
-          url: await getSignedR2Url(f.filename),
-	  thumbnailUrl: f.thumbnail ? await getSignedR2Url(f.thumbnail): null
+          url: await getSignedR2Url(f.filename, mediaTtl),
+	  thumbnailUrl: f.thumbnail ? await getSignedR2Url(f.thumbnail, mediaTtl) :
+            isPreviewImage(f.originalname) ? `/api/media/${id}/${f.id}/thumbnail` : null,
+          previewUrl: f.preview ? await getSignedR2Url(f.preview, mediaTtl) :
+            isPreviewImage(f.originalname) ? `/api/media/${id}/${f.id}/preview` : null
         }))
       );
 
+      res.setHeader("Cache-Control", "private, no-store");
       res.json({ gallery, files: filesWithUrls });
 
     } catch (e) {
       console.error("❌ Fehler /api/gallery:", e);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/media/:galleryId/:fileId/:variant", async (req, res) => {
+    try {
+      const { galleryId, fileId, variant } = req.params;
+      if (!["thumbnail", "preview"].includes(variant)) return res.sendStatus(404);
+      const gallery = await db.get("SELECT * FROM galleries WHERE id = ?", [galleryId]);
+      if (!gallery) return res.sendStatus(404);
+      if (gallery.expiresAt < Date.now()) return res.sendStatus(410);
+      const file = await db.get("SELECT * FROM files WHERE id = ? AND galleryId = ?", [fileId, galleryId]);
+      if (!file || !isPreviewImage(file.originalname)) return res.sendStatus(404);
+      let key = file[variant];
+      if (!key) {
+        try { key = (await ensurePreview(db, file))[variant]; }
+        catch (error) {
+          console.warn("Vorschau fehlgeschlagen:", file.id, error.message);
+          key = file.filename;
+        }
+      }
+      res.setHeader("Cache-Control", "private, no-store");
+      res.redirect(await getSignedR2Url(key, Math.max(1, Math.ceil((gallery.expiresAt - Date.now()) / 1000))));
+    } catch (error) {
+      res.status(500).json({ error: "Vorschau konnte nicht geladen werden" });
     }
   });
 
@@ -213,10 +247,6 @@ app.post("/api/register-file", async (req, res) => {
       );
 
       console.log(`📦 ZIP Erstellung gestartet für Galerie ${galleryId}`);
-
-      const { default: createZipInBackground } = await import(
-        "./createZipInBackground.js"
-      );
 
       createZipInBackground(galleryId).catch((err) => {
         console.error(`❌ ZIP Fehler bei Galerie ${galleryId}:`, err);
@@ -262,7 +292,54 @@ app.post("/api/register-file", async (req, res) => {
     if (!gallery.zipReady)
       return res.status(400).json({ error: "ZIP not ready" });
 
-    res.json({ url: getBunnyZipUrl(id) });
+    if (gallery.expiresAt < Date.now()) return res.sendStatus(410);
+    res.json({ url: `/api/download-zip/${encodeURIComponent(id)}/file` });
+  });
+
+  app.post("/api/retry-zip/:id", async (req, res) => {
+    try {
+      const gallery = await db.get("SELECT * FROM galleries WHERE id = ?", [req.params.id]);
+      if (!gallery) return res.sendStatus(404);
+      if (gallery.expiresAt < Date.now()) return res.sendStatus(410);
+      if (!gallery.uploadSuccess || !gallery.zipError) {
+        return res.status(409).json({ error: "ZIP kann derzeit nicht neu gestartet werden" });
+      }
+      createZipInBackground(gallery.id).catch(error => console.error("ZIP retry:", error));
+      res.status(202).json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "ZIP-Neustart fehlgeschlagen" });
+    }
+  });
+
+  app.get("/api/download-zip/:id/file", async (req, res) => {
+    const controller = new AbortController();
+    res.once("close", () => controller.abort());
+    try {
+      const gallery = await db.get("SELECT * FROM galleries WHERE id = ?", [req.params.id]);
+      if (!gallery) return res.sendStatus(404);
+      if (gallery.expiresAt < Date.now()) return res.sendStatus(410);
+      if (!gallery.zipReady) return res.status(409).json({ error: "ZIP nicht bereit" });
+      const upstream = await fetch(getBunnyZipUrl(gallery.id), {
+        signal: controller.signal,
+        headers: req.headers.range ? { Range: req.headers.range } : {}
+      });
+      if (!upstream.ok) {
+        upstream.body?.destroy();
+        return res.status(502).json({ error: "ZIP-Speicher momentan nicht erreichbar" });
+      }
+      res.status(upstream.status);
+      res.setHeader("X-Accel-Buffering", "no");
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="gallery-${gallery.id.replace(/[^a-zA-Z0-9_-]/g, "_")}.zip"`);
+      res.setHeader("Cache-Control", "private, no-store");
+      for (const header of ["content-length", "content-range", "accept-ranges"]) {
+        if (upstream.headers.has(header)) res.setHeader(header, upstream.headers.get(header));
+      }
+      await pipeline(upstream.body, res);
+    } catch (error) {
+      if (!res.headersSent && !res.destroyed) res.status(502).json({ error: "ZIP-Download fehlgeschlagen" });
+      else res.destroy();
+    }
   });
 
   // ------------------------------------------------------
@@ -302,6 +379,9 @@ app.post("/api/register-file", async (req, res) => {
     // R2 löschen
     for (const f of files) {
       try { await deleteFromR2(f.filename); } catch (_) {}
+      if (f.preview) {
+        try { await deleteFromR2(f.preview); } catch (_) {}
+      }
       // wenn du thumbnails speicherst:
       if (f.thumbnail) {
         try { await deleteFromR2(f.thumbnail); } catch (_) {}

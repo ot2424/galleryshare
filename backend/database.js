@@ -70,6 +70,11 @@ const initDb = async () => {
     // ignore if can't alter (e.g. older sqlite versions) — table was created with thumbnail above.
   }
 
+  const fileColumns = await db.all("PRAGMA table_info(files)");
+  if (!fileColumns.some(column => column.name === "preview")) {
+    await db.exec("ALTER TABLE files ADD COLUMN preview TEXT DEFAULT NULL");
+  }
+
   return db;
 };
 

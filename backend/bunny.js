@@ -25,7 +25,8 @@ export async function uploadZipToBunny(galleryId, zipFilePath) {
       method: "PUT",
       headers: {
         AccessKey: BUNNY_API_KEY,
-        "Content-Type": "application/octet-stream"
+        "Content-Type": "application/zip",
+        "Content-Length": String((await fs.promises.stat(zipFilePath)).size)
       },
       body: stream
     });

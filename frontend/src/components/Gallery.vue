@@ -54,11 +54,14 @@
             <button
               class="brand-button mt-5 w-full"
               @click="startDownload"
-              :disabled="!zipReady || downloading"
+              :disabled="(!zipReady && !zipError) || downloading"
             >
-              <span v-if="!zipReady">ZIP wird erstellt ({{ zipProgress }}%)</span>
+              <span v-if="zipError">ZIP erneut erstellen</span>
+              <span v-else-if="downloading">Download wird gestartet…</span>
+              <span v-else-if="!zipReady">ZIP wird erstellt ({{ zipProgress }}%)</span>
               <span v-else>Gesamte Galerie herunterladen</span>
             </button>
+            <p v-if="downloadError" role="alert" class="mt-3 text-sm text-red-700">{{ downloadError }}</p>
           </div>
         </div>
       </section>
@@ -85,17 +88,14 @@
               >
                 <a
                   :data-fancybox="'gallery'"
-                  :data-src="'#video-' + file.filename"
-                  data-type="inline"
+                  :href="file.url"
+                  :data-src="file.url"
+                  data-type="video"
+                  :data-html5video-format="videoType(file.originalname)"
                   class="absolute inset-0"
                 >
-                  <video
-                    :src="file.url"
-                    class="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-95"
-                    muted
-                    playsinline
-                    preload="metadata"
-                  ></video>
+                  <img v-if="file.thumbnailUrl" :src="file.thumbnailUrl" loading="lazy" decoding="async"
+                    class="h-full w-full object-cover" :alt="file.originalname" />
                   <div class="absolute inset-0 flex items-center justify-center">
                     <div class="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-2xl text-white backdrop-blur-sm">
                       Play
@@ -103,20 +103,13 @@
                   </div>
                 </a>
 
-                <div :id="'video-' + file.filename" style="display:none;">
-                  <video
-                    :src="file.url"
-                    controls
-                    playsinline
-                    style="width:100%;max-height:80vh;"
-                  ></video>
-                </div>
               </div>
 
-              <a v-else :href="file.url" :data-src="file.url" data-fancybox="gallery" class="block aspect-[4/3] overflow-hidden">
+              <a v-else :href="file.url" :data-src="file.previewUrl || file.url" :data-download-src="file.url" data-type="image" data-fancybox="gallery" class="block aspect-[4/3] overflow-hidden">
                 <img
                   :src="file.thumbnailUrl || file.url"
                   loading="lazy"
+                  decoding="async"
                   class="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
                   :alt="file.originalname || file.filename"
                 />
@@ -143,7 +136,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
 import { Fancybox } from '@fancyapps/ui'
 import '@fancyapps/ui/dist/fancybox/fancybox.css'
 import { useRouter } from 'vue-router'
@@ -155,19 +148,16 @@ const galleryName = ref('')
 const files = ref([])
 const loading = ref(true)
 const zipReady = ref(false)
+const zipError = ref(false)
+const downloadError = ref('')
 const zipProgress = ref(0)
 const downloading = ref(false)
 const timeLeftMs = ref(0)
 const timeDisplay = ref('')
 const consentGiven = ref(localStorage.getItem('galleryConsent') === '1')
 
-const downloadProgress = ref(0)
-const downloadedBytes = ref(0)
-const totalBytes = ref(null)
-const downloadSpeedMBs = ref(0)
-const etaSeconds = ref(null)
-
-const isVideo = (name) => /\.(mp4|webm|ogg)$/i.test(name || '')
+const isVideo = name => /\.(mp4|webm|ogg|mov|m4v)$/i.test(name || '')
+const videoType = name => /\.webm$/i.test(name) ? 'video/webm' : /\.ogg$/i.test(name) ? 'video/ogg' : /\.mov$/i.test(name) ? 'video/quicktime' : 'video/mp4'
 
 const sortedFiles = computed(() => {
   return [...files.value].sort((a, b) => {
@@ -196,41 +186,21 @@ const updateTimeDisplay = (ms) => {
         : `${hours} Std ${remainingMinutes} Min`
 }
 
-const downloadSpeedLabel = computed(() => {
-  if (!downloadSpeedMBs.value || !isFinite(downloadSpeedMBs.value)) return ''
-  return `${downloadSpeedMBs.value.toFixed(1)} MB/s`
-})
-
-const etaLabel = computed(() => {
-  if (!etaSeconds.value || !isFinite(etaSeconds.value)) return ''
-  const secs = Math.max(0, Math.round(etaSeconds.value))
-  const mins = Math.floor(secs / 60)
-  const s = secs % 60
-  return `${mins}:${s.toString().padStart(2, '0')}`
-})
-
-const downloadProgressText = computed(() => {
-  if (!totalBytes.value || downloadProgress.value === 0) return 'Vorbereitung...'
-  const parts = [`${downloadProgress.value}%`]
-  if (downloadSpeedLabel.value) parts.push(downloadSpeedLabel.value)
-  if (etaLabel.value) parts.push(etaLabel.value)
-  return parts.join(' | ')
-})
-
 let pollingInterval = null
 
 const startPolling = () => {
   if (pollingInterval) clearInterval(pollingInterval)
 
   pollingInterval = setInterval(async () => {
-    const res = await fetch(`/api/zip-progress/${props.galleryId}`)
-    if (!res.ok) return
-    const data = await res.json()
-
-    zipProgress.value = data.zipProgress || 0
-    zipReady.value = data.zipReady === 1
-
-    if (zipReady.value) clearInterval(pollingInterval)
+    try {
+      const res = await fetch(`/api/zip-progress/${props.galleryId}`)
+      if (!res.ok) return
+      const data = await res.json()
+      zipProgress.value = data.zipProgress || 0
+      zipReady.value = !!data.zipReady
+      zipError.value = !!data.zipError
+      if (zipReady.value || zipError.value) clearInterval(pollingInterval)
+    } catch { /* The next poll retries temporary network errors. */ }
   }, 2000)
 }
 
@@ -243,14 +213,19 @@ const fetchGallery = async () => {
     galleryName.value = data.gallery?.name
     files.value = data.files
     zipReady.value = !!data.gallery?.zipReady
+    zipError.value = !!data.gallery?.zipError
     zipProgress.value = data.gallery?.zipProgress ?? 0
 
     timeLeftMs.value = data.gallery.expiresAt - Date.now()
     updateTimeDisplay(timeLeftMs.value)
 
+    loading.value = false
     await nextTick()
+    Fancybox.unbind('[data-fancybox]')
     Fancybox.bind('[data-fancybox]', {
       Carousel: {
+        Lazyload: { preload: 1 },
+        Video: { autoplay: false },
         Toolbar: {
           display: {
             left: ['counter'],
@@ -266,26 +241,30 @@ const fetchGallery = async () => {
 }
 
 async function startDownload() {
-  if (!zipReady.value) return
-
+  if (downloading.value) return
   downloading.value = true
+  downloadError.value = ''
   try {
-    const res = await fetch(`/api/download-zip/${props.galleryId}`)
-    const data = await res.json()
-
-    if (!data.url) {
-      alert('ZIP ist noch nicht bereit')
+    if (zipError.value) {
+      const retry = await fetch(`/api/retry-zip/${props.galleryId}`, { method: 'POST' })
+      if (!retry.ok) throw new Error('ZIP konnte nicht neu gestartet werden. Bitte erneut versuchen.')
+      zipError.value = false
+      zipProgress.value = 0
+      startPolling()
       return
     }
-
+    if (!zipReady.value) return
+    const res = await fetch(`/api/download-zip/${props.galleryId}`)
+    const data = await res.json()
+    if (!res.ok || !data.url) throw new Error('ZIP ist momentan nicht verfügbar. Bitte erneut versuchen.')
     const link = document.createElement('a')
     link.href = data.url
-    link.download = ''
-    link.style.display = 'none'
-
+    link.download = `${galleryName.value || 'Galerie'}.zip`
     document.body.appendChild(link)
     link.click()
     link.remove()
+  } catch (error) {
+    downloadError.value = error.message || 'Download fehlgeschlagen.'
   } finally {
     downloading.value = false
   }
@@ -307,6 +286,11 @@ onMounted(() => {
     fetchGallery()
     startPolling()
   }
+})
+onBeforeUnmount(() => {
+  clearInterval(pollingInterval)
+  Fancybox.unbind('[data-fancybox]')
+  Fancybox.close()
 })
 </script>
 

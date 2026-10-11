@@ -1,83 +1,94 @@
 import archiver from "archiver";
 import fs from "fs";
 import path from "path";
+import { once } from "node:events";
 import initDb from "./database.js";
 import { uploadZipToBunny } from "./bunny.js";
 import { getStreamFromR2 } from "./r2.js";
 
-const ZIP_PROGRESS_STEPS = Number(process.env.ZIP_PROGRESS_STEPS || 12);
 
-export default async function createZipInBackground(galleryId) {
-  const db = await initDb();
-  const tempZipPath = path.join("/tmp", `${galleryId}.zip`);
+export default createZipBuilder({ initDb, getStreamFromR2, uploadZipToBunny });
 
-  const files = await db.all(
-    `SELECT filename, originalname
-     FROM files
-     WHERE galleryId = ?
-     ORDER BY originalname COLLATE NOCASE`,
-    [galleryId]
-  );
+export function createZipBuilder({ initDb, getStreamFromR2, uploadZipToBunny }) {
+  const jobs = new Map();
 
-  if (!files.length) {
-    await markZipError(db, galleryId);
-    throw new Error(`Keine Dateien fuer ZIP in Galerie ${galleryId}`);
+  function createZipInBackground(galleryId) {
+    if (jobs.has(galleryId)) return jobs.get(galleryId);
+    const job = buildZip(galleryId).finally(() => jobs.delete(galleryId));
+    jobs.set(galleryId, job);
+    return job;
   }
 
-  console.log(`ZIP-Erstellung aus R2 gestartet fuer Galerie ${galleryId}`);
-
-  const output = fs.createWriteStream(tempZipPath);
-  const archive = archiver("zip", { store: true });
-  const total = files.length;
-  let processed = 0;
-  let lastProgressBucket = -1;
-
-  archive.on("error", (error) => {
-    throw error;
-  });
-
-  archive.pipe(output);
-
-  for (const file of files) {
-    const stream = await getStreamFromR2(file.filename);
-    const entryName = getEntryName(file);
-
-    archive.append(stream, { name: entryName });
-    processed += 1;
-
-    const bucket = Math.floor((processed / total) * ZIP_PROGRESS_STEPS);
-    if (bucket !== lastProgressBucket || processed === total) {
-      lastProgressBucket = bucket;
-      const progress = Math.min(95, Math.round((processed / total) * 95));
-      await db.run(
-        `UPDATE galleries SET zipProgress = ? WHERE id = ?`,
-        [progress, galleryId]
+  async function buildZip(galleryId) {
+    const db = await initDb();
+    const tempZipPath = path.join("/tmp", `gallery-${galleryId}.zip`);
+    let archive;
+    let output;
+    const sources = [];
+    try {
+      await db.run("UPDATE galleries SET zipReady = 0, zipError = 0, zipProgress = 0 WHERE id = ?", [galleryId]);
+      const files = await db.all(
+        "SELECT filename, originalname FROM files WHERE galleryId = ? ORDER BY originalname COLLATE NOCASE",
+        [galleryId]
       );
+      if (!files.length) throw new Error("Keine Dateien fuer ZIP");
+
+      output = fs.createWriteStream(tempZipPath);
+      archive = archiver("zip", { store: true });
+      // Register completion before finalize: close may happen before finalize resolves.
+      const completed = new Promise((resolve, reject) => {
+        output.once("close", resolve);
+        output.once("error", reject);
+        archive.once("error", reject);
+        archive.on("warning", reject);
+      });
+      // Handle rejection immediately, including while awaiting R2 requests.
+      completed.catch(() => {});
+      archive.pipe(output);
+      archive.on("entry", () => {
+        processed += 1;
+        const progress = Math.min(95, Math.round(processed / files.length * 95));
+        updates = updates.then(() => db.run(
+          "UPDATE galleries SET zipProgress = ? WHERE id = ?", [progress, galleryId]
+        ));
+        updates.catch(() => {});
+      });
+      let processed = 0;
+      let updates = Promise.resolve();
+      for (const file of files) {
+        const stream = await getStreamFromR2(file.filename);
+        sources.push(stream);
+        stream.once("error", error => archive.destroy(error));
+        const entryWritten = once(archive, "entry");
+        archive.append(stream, { name: getEntryName(file) });
+        await Promise.race([entryWritten, completed.then(() => { throw new Error("ZIP stream closed prematurely"); })]);
+      }
+      await Promise.all([archive.finalize(), completed]);
+      await updates;
+      if (!await uploadZipToBunny(galleryId, tempZipPath)) {
+        throw new Error("ZIP-Upload zu Bunny fehlgeschlagen");
+      }
+      await db.run(
+        "UPDATE galleries SET zipReady = 1, zipError = 0, zipProgress = 100 WHERE id = ?",
+        [galleryId]
+      );
+    } catch (error) {
+      archive?.abort();
+      for (const source of sources) source.destroy();
+      if (output && !output.closed) {
+        await new Promise(resolve => {
+          output.once("close", resolve);
+          output.destroy();
+        });
+      }
+      await markZipError(db, galleryId);
+      throw error;
+    } finally {
+      await cleanupTempZip(tempZipPath);
     }
   }
 
-  await archive.finalize();
-  await waitForStreamClose(output);
-
-  console.log("ZIP fertig geschrieben:", tempZipPath);
-
-  const uploaded = await uploadZipToBunny(galleryId, tempZipPath);
-
-  if (!uploaded) {
-    await markZipError(db, galleryId);
-    await cleanupTempZip(tempZipPath);
-    return;
-  }
-
-  await db.run(
-    `UPDATE galleries
-     SET zipReady = 1, zipError = 0, zipProgress = 100
-     WHERE id = ?`,
-    [galleryId]
-  );
-
-  console.log("ZIP auf Bunny hochgeladen");
-  await cleanupTempZip(tempZipPath);
+  return createZipInBackground;
 }
 
 function getEntryName(file) {
@@ -98,13 +109,6 @@ async function markZipError(db, galleryId) {
      WHERE id = ?`,
     [galleryId]
   );
-}
-
-function waitForStreamClose(stream) {
-  return new Promise((resolve, reject) => {
-    stream.on("close", resolve);
-    stream.on("error", reject);
-  });
 }
 
 async function cleanupTempZip(tempZipPath) {
