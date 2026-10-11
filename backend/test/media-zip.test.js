@@ -52,6 +52,7 @@ test('ZIP finishes, uploads complete content and deduplicates concurrent jobs', 
   await first;
   assert.equal(zip.readUInt32LE(0), 0x04034b50);
   assert.ok(zip.includes(Buffer.from('original media content')));
+  assert.ok(zip.includes(Buffer.from([0x50, 0x4b, 0x06, 0x06])), 'ZIP64 end record exists');
   assert.equal(zip.readUInt32LE(zip.length - 22), 0x06054b50);
   assert.equal((await db.get('SELECT zipReady FROM galleries WHERE id = ?', [id])).zipReady, 1);
   await assert.rejects(fs.access(path.join(os.tmpdir(), `gallery-${id}.zip`)));
@@ -95,6 +96,15 @@ test('existing originals get small cached image variants', async () => {
   const count = objects.size;
   await ensurePreview(db, file);
   assert.equal(objects.size, count);
+});
+
+test('insufficient disk space fails before streaming original files', async () => {
+  const inserted = await db.run('INSERT INTO files (galleryId, filename, originalname, sizeBytes) VALUES (?, ?, ?, ?)',
+    [id, 'too-large', 'large.mov', Number.MAX_SAFE_INTEGER]);
+  try {
+    await assert.rejects(buildZip(id), /Nicht genügend freier Speicher/);
+    assert.equal((await db.get('SELECT zipError FROM galleries WHERE id = ?', [id])).zipError, 1);
+  } finally { await db.run('DELETE FROM files WHERE id = ?', [inserted.lastID]); }
 });
 
 test.after(async () => {

@@ -209,6 +209,7 @@
 </template>
 
 <script setup>
+import { uploadMultipart } from '../lib/upload.js'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -304,34 +305,46 @@ const createGallery = async () => {
   try {
     await runWithConcurrency(files.value, DIRECT_UPLOAD_CONCURRENCY, async (file) => {
       const contentType = file.type || 'application/octet-stream'
-      const uploadMetaRes = await fetch('/api/get-upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: uploadAbortController.value.signal,
-        body: JSON.stringify({
-          galleryId,
-          filename: file.name,
-          contentType
-        })
-      })
-
-      if (!uploadMetaRes.ok) {
-        throw new Error('Upload-URL konnte nicht erzeugt werden')
+      let key
+      const reportBytes = bytes => {
+        uploadedBytes += bytes
+        updateUploadProgress(uploadedBytes, totalBytes, startTime)
       }
+      if (file.size >= 64 * 1024 * 1024) {
+        key = await uploadMultipart(file, galleryId, uploadAbortController.value.signal, reportBytes)
+      } else {
+        const uploadMetaRes = await fetch('/api/get-upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: uploadAbortController.value.signal,
+          body: JSON.stringify({
+            galleryId,
+            filename: file.name,
+            contentType
+          })
+        })
 
-      const { key, uploadUrl } = await uploadMetaRes.json()
+        if (!uploadMetaRes.ok) {
+          throw new Error('Upload-URL konnte nicht erzeugt werden')
+        }
 
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': contentType
-        },
-        body: file,
-        signal: uploadAbortController.value.signal
-      })
+        const { key: directKey, uploadUrl } = await uploadMetaRes.json()
 
-      if (!uploadRes.ok) {
-        throw new Error(`Direkt-Upload fehlgeschlagen (${uploadRes.status})`)
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': contentType
+          },
+          body: file,
+          signal: uploadAbortController.value.signal
+        })
+
+        if (!uploadRes.ok) {
+          throw new Error(`Direkt-Upload fehlgeschlagen (${uploadRes.status})`)
+        }
+
+        key = directKey
+        reportBytes(file.size)
       }
 
       const registerRes = await fetch('/api/register-file', {
@@ -342,6 +355,7 @@ const createGallery = async () => {
           galleryId,
           key,
           originalname: file.name,
+          sizeBytes: file.size,
           lastModified: file.lastModified
         })
       })
@@ -350,9 +364,7 @@ const createGallery = async () => {
         throw new Error('Datei konnte nicht registriert werden')
       }
 
-      uploadedBytes += file.size
-      updateUploadProgress(uploadedBytes, totalBytes, startTime)
-    })
+    }, () => uploadAbortController.value?.abort())
 
     const finalizeRes = await fetch('/api/finalize-gallery', {
       method: 'POST',
@@ -375,8 +387,9 @@ const createGallery = async () => {
       fileInput.value.value = ''
     }
   } catch (err) {
+    uploadAbortController.value?.abort()
     console.error(err)
-    alert(err.name === 'AbortError' ? 'Upload abgebrochen' : 'Upload fehlgeschlagen')
+    alert(err.name === 'AbortError' ? 'Upload abgebrochen' : err.message || 'Upload fehlgeschlagen')
   } finally {
     uploading.value = false
     uploadAbortController.value = null
@@ -443,18 +456,21 @@ const nukeEverything = async () => {
 
 onMounted(fetchGalleries)
 
-async function runWithConcurrency(items, concurrency, worker) {
+async function runWithConcurrency(items, concurrency, worker, onError) {
   const limit = Math.max(1, Math.min(concurrency, items.length || 1))
   let currentIndex = 0
-
+  let failure
   async function next() {
-    while (currentIndex < items.length) {
+    while (!failure && currentIndex < items.length) {
       const index = currentIndex++
-      await worker(items[index], index)
+      try { await worker(items[index], index) }
+      catch (error) {
+        if (!failure) { failure = error; onError?.() }
+      }
     }
   }
-
   await Promise.all(Array.from({ length: limit }, () => next()))
+  if (failure) throw failure
 }
 
 function formatRemainingTime(seconds) {

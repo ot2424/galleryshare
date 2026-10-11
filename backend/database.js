@@ -75,6 +75,9 @@ const initDb = async () => {
     await db.exec("ALTER TABLE files ADD COLUMN preview TEXT DEFAULT NULL");
   }
 
+  if (!fileColumns.some(column => column.name === "sizeBytes")) {
+    await db.exec("ALTER TABLE files ADD COLUMN sizeBytes INTEGER DEFAULT 0");
+  }
   for (const column of ["uploadedAt", "lastModified"]) {
     if (!fileColumns.some(existing => existing.name === column)) {
       await db.exec(`ALTER TABLE files ADD COLUMN ${column} INTEGER DEFAULT NULL`);

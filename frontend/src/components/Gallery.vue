@@ -74,7 +74,7 @@
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <label class="flex items-center gap-2 text-sm text-[var(--muted)]" for="gallery-sort">
             Sortieren nach
-            <select id="gallery-sort" v-model="sortOrder" class="rounded-xl border border-[rgba(111,78,55,0.2)] bg-white px-3 py-2 text-[var(--ink)]">
+            <select id="gallery-sort" v-model="sortOrder" class="rounded-xl border border-[rgba(111,78,55,0.2)] bg-white px-3 py-2 text-[var(--ink)]" @change="visibleCount = 90">
               <option value="date-asc">Datum aufsteigend</option>
               <option value="date-desc">Datum absteigend</option>
               <option value="name-asc">Name A–Z</option>
@@ -86,7 +86,7 @@
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <article
-            v-for="file in sortedFiles"
+            v-for="file in visibleFiles"
             :key="file.filename"
             class="soft-card group overflow-hidden rounded-[1.75rem]"
           >
@@ -96,16 +96,14 @@
                 class="relative aspect-[4/3] overflow-hidden bg-[rgba(41,28,19,0.92)]"
               >
                 <a
-                  :data-fancybox="'gallery'"
                   :href="file.url"
-                  :data-src="file.url"
-                  data-type="video"
-                  :data-html5video-format="videoType(file.originalname)"
+                  @click.prevent="openMedia(file)"
                   class="absolute inset-0"
                 >
-                  <img v-if="file.thumbnailUrl" :src="file.thumbnailUrl" loading="lazy" decoding="async"
+                  <img v-if="file.thumbnailUrl && !posterErrors[file.id]" :src="file.thumbnailUrl" loading="lazy" decoding="async" @error="posterErrors[file.id] = true"
                     class="h-full w-full object-cover" :alt="file.originalname" />
                   <div class="absolute inset-0 flex items-center justify-center">
+                    <span v-if="posterErrors[file.id]" class="absolute bottom-4 text-sm text-white">Vorschau wird vorbereitet</span>
                     <div class="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-2xl text-white backdrop-blur-sm">
                       Play
                     </div>
@@ -114,7 +112,7 @@
 
               </div>
 
-              <a v-else :href="file.url" :data-src="file.previewUrl || file.url" :data-download-src="file.url" data-type="image" data-fancybox="gallery" class="block aspect-[4/3] overflow-hidden">
+              <a v-else @click.prevent="openMedia(file)" :href="file.url" :data-src="file.previewUrl || file.url" :data-download-src="file.url" data-type="image" data-fancybox="gallery" class="block aspect-[4/3] overflow-hidden">
                 <img
                   :src="file.thumbnailUrl || file.url"
                   loading="lazy"
@@ -132,6 +130,7 @@
             </div>
           </article>
         </div>
+        <button v-if="visibleFiles.length < sortedFiles.length" class="secondary-button mt-6" @click="visibleCount += 90">Weitere Medien anzeigen</button>
       </section>
 
       <section v-else-if="!loading" class="soft-card mt-6 rounded-[2rem] p-10 text-center">
@@ -145,8 +144,9 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { Fancybox } from '@fancyapps/ui'
+import { isGalleryVideo as isVideo, gallerySlides, createGalleryVideoLoader } from '../lib/galleryViewer.js'
 import { sortGalleryFiles } from '../lib/gallerySort.js'
 import '@fancyapps/ui/dist/fancybox/fancybox.css'
 import { useRouter } from 'vue-router'
@@ -166,8 +166,35 @@ const timeLeftMs = ref(0)
 const timeDisplay = ref('')
 const consentGiven = ref(localStorage.getItem('galleryConsent') === '1')
 
-const isVideo = name => /\.(mp4|webm|ogg|mov|m4v)$/i.test(name || '')
-const videoType = name => /\.webm$/i.test(name) ? 'video/webm' : /\.ogg$/i.test(name) ? 'video/ogg' : /\.mov$/i.test(name) ? 'video/quicktime' : 'video/mp4'
+const visibleCount = ref(90)
+const visibleFiles = computed(() => sortedFiles.value.slice(0, visibleCount.value))
+const posterErrors = ref({})
+const videoLoader = createGalleryVideoLoader(props.galleryId)
+let posterRetry = null
+
+function openMedia(file) {
+  Fancybox.close()
+  videoLoader.stop()
+  Fancybox.show(gallerySlides(sortedFiles.value), {
+    startIndex: sortedFiles.value.findIndex(item => item.id === file.id),
+    Carousel: {
+      Lazyload: { preload: 1 },
+      Video: {
+        autoplay: false,
+        html5videoTpl: '<video class="f-html5video" playsinline controls preload="metadata" poster="{{poster}}"></video>'
+      },
+      Toolbar: {
+        display: { left: ['counter'], middle: [], right: ['autoplay', 'download', 'thumbs', 'close'] }
+      }
+    },
+    on: {
+      'Carousel.ready': viewer => videoLoader.sync(viewer),
+      'Carousel.change': viewer => videoLoader.sync(viewer),
+      'Carousel.contentReady': viewer => videoLoader.sync(viewer),
+      close: () => videoLoader.stop()
+    }
+  })
+}
 
 const sortOrder = ref('date-asc')
 const sortedFiles = computed(() => sortGalleryFiles(files.value, sortOrder.value))
@@ -218,21 +245,7 @@ const fetchGallery = async () => {
     updateTimeDisplay(timeLeftMs.value)
 
     loading.value = false
-    await nextTick()
-    Fancybox.unbind('[data-fancybox]')
-    Fancybox.bind('[data-fancybox]', {
-      Carousel: {
-        Lazyload: { preload: 1 },
-        Video: { autoplay: false },
-        Toolbar: {
-          display: {
-            left: ['counter'],
-            middle: [],
-            right: ['autoplay', 'download', 'thumbs', 'close']
-          }
-        }
-      }
-    })
+
   } finally {
     loading.value = false
   }
@@ -254,10 +267,12 @@ async function startDownload() {
     if (!zipReady.value) return
     const res = await fetch(`/api/download-zip/${props.galleryId}`)
     const data = await res.json()
-    if (!res.ok || !data.url) throw new Error('ZIP ist momentan nicht verfügbar. Bitte erneut versuchen.')
+    if (!res.ok || !data.url) {
+      if (data.zipError) { zipError.value = true; zipReady.value = false }
+      throw new Error(data.error || 'ZIP ist momentan nicht verfügbar. Bitte erneut versuchen.')
+    }
     const link = document.createElement('a')
     link.href = data.url
-    link.download = `${galleryName.value || 'Galerie'}.zip`
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -280,6 +295,7 @@ const declinePrivacy = () => {
 }
 
 onMounted(() => {
+  posterRetry = setInterval(() => { posterErrors.value = {} }, 30000)
   if (consentGiven.value) {
     fetchGallery()
     startPolling()
@@ -287,6 +303,8 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   clearInterval(pollingInterval)
+  clearInterval(posterRetry)
+  videoLoader.stop()
   Fancybox.unbind('[data-fancybox]')
   Fancybox.close()
 })
@@ -296,4 +314,19 @@ onBeforeUnmount(() => {
 .fancybox__thumbs {
   display: none !important;
 }
+</style>
+
+<style>
+.gallery-video-status {
+  position: absolute;
+  bottom: 3rem;
+  left: 0;
+  right: 0;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  text-align: center;
+  pointer-events: none;
+}
+.gallery-video-status:empty { display: none; }
 </style>

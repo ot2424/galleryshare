@@ -121,3 +121,15 @@ export async function deleteAllZipsFromBunny() {
 export function getBunnyZipUrl(galleryId) {
   return `${BUNNY_CDN_HOST}/gallery-zips/${galleryId}.zip`;
 }
+
+// Storage credentials stay on the API server and never enter browser URLs.
+export function getBunnyZipSources(galleryId) {
+  const path = `gallery-zips/${encodeURIComponent(galleryId)}.zip`;
+  const sources = [];
+  if (BUNNY_CDN_HOST) sources.push({ url: `${BUNNY_CDN_HOST.replace(/\/$/, '')}/${path}`, headers: {} });
+  if (BUNNY_STORAGE_HOST && BUNNY_STORAGE_ZONE && BUNNY_API_KEY) sources.push({
+    url: `${BUNNY_STORAGE_HOST.replace(/\/$/, '')}/${encodeURIComponent(BUNNY_STORAGE_ZONE)}/${path}`,
+    headers: { AccessKey: BUNNY_API_KEY }
+  });
+  return sources;
+}

@@ -6,6 +6,9 @@ web_dir=/var/www/galleryshare
 for dependency in node npm pm2 curl; do
   command -v "$dependency" >/dev/null || { echo "$dependency fehlt." >&2; exit 1; }
 done
+ffmpeg_binary="${FFMPEG_PATH:-ffmpeg}"
+command -v "$ffmpeg_binary" >/dev/null || { echo 'FFmpeg fehlt: apt install ffmpeg (oder FFMPEG_PATH setzen).' >&2; exit 1; }
+"$ffmpeg_binary" -hide_banner -encoders 2>/dev/null | grep 'libx264' >/dev/null || { echo 'FFmpeg benötigt libx264.' >&2; exit 1; }
 # Fail before restarting the API if this session cannot publish the frontend.
 test -d "$web_dir"
 deploy_probe="$(mktemp "$web_dir/.deploy-check.XXXXXX")"
@@ -14,6 +17,8 @@ rm -f -- "$deploy_probe"
 npm --prefix "$project_dir/backend" test
 node --check "$project_dir/backend/index.js"
 node --check "$project_dir/backend/mediaPreview.js"
+node --check "$project_dir/backend/videoPreview.js"
+node --check "$project_dir/backend/zipDownload.js"
 npm --prefix "$project_dir/frontend" run build
 
 backup_dir="$project_dir/deploy/backups/$(date -u +%Y%m%dT%H%M%SZ)"

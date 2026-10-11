@@ -3,7 +3,10 @@
 Galleryshare-API: 127.0.0.1:3000, GuessTheTeam-API: 127.0.0.1:4000.
 Die Projekte behalten getrennte Umgebungsdateien und Prozesse.
 
-Voraussetzungen: Node.js 22, npm, PM2 und Nginx. Galleryshare liest
+Voraussetzungen: Node.js 22, npm, PM2, Nginx und FFmpeg mit libx264/AAC.
+Für Video-Vorschauen `apt install ffmpeg` ausführen; R2-CORS muss `ETag`
+freigeben (siehe README). Für 20-GB-Galerien mindestens 40 GB freie Platte
+als Ausgangsreserve für ZIP und Video-Aufbereitung vorsehen. Galleryshare liest
 /root/galleryshare/.env; GuessTheTeam liest /root/guesstheteam/.env.
 Galleryshare benötigt ADMIN_PASSWORD zusätzlich zu den Cloud-Zugangsdaten.
 GuessTheTeam benötigt für production DATABASE_URL, SMTP_HOST, SMTP_FROM

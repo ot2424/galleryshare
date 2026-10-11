@@ -5,10 +5,13 @@ import "./env.js";
 import initDb from "./database.js";
 import uploadStreamRouter from "./uploadStreamRouter.js";
 import fs from "fs";
-import fetch from "node-fetch";
+import { randomUUID } from "node:crypto";
+import { beginMultipart, signMultipartPart, finishMultipart, cancelMultipart } from "./r2.js";
+import { openZipDownload } from "./zipDownload.js";
 import { pipeline } from "node:stream/promises";
 import createZipInBackground from "./createZipInBackground.js";
 import { ensurePreview, isPreviewImage } from "./mediaPreview.js";
+import { isVideo, videoPreviews } from "./videoPreview.js";
 import {
   deleteFromR2,
   getSignedR2Url,
@@ -18,8 +21,7 @@ import {
 
 import {
   deleteAllZipsFromBunny,
-  deleteZipFromBunny,
-  getBunnyZipUrl
+  deleteZipFromBunny
 } from "./bunny.js";
 
 
@@ -109,24 +111,56 @@ app.post("/api/get-upload-url", async (req, res) => {
 });
 
 
+// Original bytes go straight to R2; the API only handles upload metadata.
+app.post("/api/multipart/:action", async (req, res) => {
+  try {
+    const { galleryId, filename, contentType, key, uploadId, partNumber, parts } = req.body;
+    const gallery = await db.get("SELECT * FROM galleries WHERE id = ?", [galleryId]);
+    if (!gallery) return res.sendStatus(404);
+    if (gallery.expiresAt < Date.now() && req.params.action !== "abort") return res.sendStatus(410);
+    if (req.params.action === "start") {
+      if (typeof filename !== "string" || !filename) return res.sendStatus(400);
+      const objectKey = `${galleryId}/originals/${randomUUID()}/${filename.split(/[\\/]/).pop()}`;
+      const result = await beginMultipart(objectKey, contentType || "application/octet-stream");
+      return res.json({ key: objectKey, uploadId: result.UploadId });
+    }
+    if (typeof key !== "string" || !key.startsWith(`${galleryId}/originals/`) || typeof uploadId !== "string" || !uploadId) return res.sendStatus(400);
+    if (req.params.action === "part") {
+      if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) return res.sendStatus(400);
+      return res.json({ url: await signMultipartPart(key, uploadId, partNumber) });
+    }
+    if (req.params.action === "complete") {
+      if (!Array.isArray(parts) || !parts.length || parts.length > 10000 || parts.some((part, i) => part.PartNumber !== i + 1 || typeof part.ETag !== "string" || !part.ETag)) return res.sendStatus(400);
+      await finishMultipart(key, uploadId, parts);
+    } else if (req.params.action === "abort") await cancelMultipart(key, uploadId);
+    else return res.sendStatus(404);
+    res.json({ success: true });
+  } catch (error) { res.status(502).json({ error: "Upload-Schritt fehlgeschlagen" }); }
+});
+
 // ------------------------------------------------------
 // DATEI REGISTRIEREN
 // ------------------------------------------------------
 app.post("/api/register-file", async (req, res) => {
   try {
-    const { galleryId, key, originalname, lastModified } = req.body;
+    const { galleryId, key, originalname, sizeBytes, lastModified } = req.body;
 
     if (!galleryId || !key || !originalname) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
-    await db.run(
-      `INSERT INTO files (galleryId, filename, originalname, uploadedAt, lastModified)
-       VALUES (?, ?, ?, ?, ?)`,
-      [galleryId, key, originalname, Date.now(),
+    const inserted = await db.run(
+      `INSERT INTO files (galleryId, filename, originalname, sizeBytes, uploadedAt, lastModified)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [galleryId, key, originalname, Number.isSafeInteger(sizeBytes) && sizeBytes >= 0 ? sizeBytes : 0, Date.now(),
         Number.isSafeInteger(lastModified) && lastModified > 0 ? lastModified : null]
     );
 
+    if (isVideo(originalname)) {
+      const file = await db.get("SELECT * FROM files WHERE id = ?", [inserted.lastID]);
+      videoPreviews.ensure(db, file, "thumbnail").catch(error => console.warn("Video-Vorschaubild:", file.id, error.message));
+      videoPreviews.ensure(db, file).catch(error => console.warn("Video-Vorschau:", file.id, error.message));
+    }
     console.log(`📝 Datei registriert → ${originalname}`);
     res.json({ success: true });
 
@@ -169,7 +203,7 @@ app.post("/api/register-file", async (req, res) => {
           ...f,
           url: await getSignedR2Url(f.filename, mediaTtl),
 	  thumbnailUrl: f.thumbnail ? await getSignedR2Url(f.thumbnail, mediaTtl) :
-            isPreviewImage(f.originalname) ? `/api/media/${id}/${f.id}/thumbnail` : null,
+            (isPreviewImage(f.originalname) || isVideo(f.originalname)) ? `/api/media/${id}/${f.id}/thumbnail` : null,
           previewUrl: f.preview ? await getSignedR2Url(f.preview, mediaTtl) :
             isPreviewImage(f.originalname) ? `/api/media/${id}/${f.id}/preview` : null
         }))
@@ -192,12 +226,14 @@ app.post("/api/register-file", async (req, res) => {
       if (!gallery) return res.sendStatus(404);
       if (gallery.expiresAt < Date.now()) return res.sendStatus(410);
       const file = await db.get("SELECT * FROM files WHERE id = ? AND galleryId = ?", [fileId, galleryId]);
-      if (!file || !isPreviewImage(file.originalname)) return res.sendStatus(404);
+      if (!file || (!isPreviewImage(file.originalname) && !isVideo(file.originalname))) return res.sendStatus(404);
+      if (isVideo(file.originalname) && variant === "preview" && !file.preview) return res.sendStatus(409);
       let key = file[variant];
       if (!key) {
-        try { key = (await ensurePreview(db, file))[variant]; }
+        try { key = (await (isVideo(file.originalname) ? videoPreviews.ensure(db, file, variant) : ensurePreview(db, file)))[variant]; }
         catch (error) {
           console.warn("Vorschau fehlgeschlagen:", file.id, error.message);
+          if (isVideo(file.originalname)) return res.sendStatus(503);
           key = file.filename;
         }
       }
@@ -206,6 +242,25 @@ app.post("/api/register-file", async (req, res) => {
     } catch (error) {
       res.status(500).json({ error: "Vorschau konnte nicht geladen werden" });
     }
+  });
+
+  app.get("/api/video-status/:galleryId/:fileId", async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    try {
+      const { galleryId, fileId } = req.params;
+      const gallery = await db.get("SELECT * FROM galleries WHERE id = ?", [galleryId]);
+      if (!gallery) return res.sendStatus(404);
+      if (gallery.expiresAt < Date.now()) return res.sendStatus(410);
+      const file = await db.get("SELECT * FROM files WHERE id = ? AND galleryId = ?", [fileId, galleryId]);
+      if (!file || !isVideo(file.originalname)) return res.sendStatus(404);
+      let status = videoPreviews.state(file);
+      if (status === "pending") {
+        videoPreviews.ensure(db, file).catch(error => console.warn("Video-Vorschau:", file.id, error.message));
+        status = "processing";
+      }
+      res.json({ status, url: file.preview ? await getSignedR2Url(file.preview,
+        Math.max(1, Math.ceil((gallery.expiresAt - Date.now()) / 1000))) : null });
+    } catch (error) { res.status(500).json({ error: "Video-Status nicht verfügbar" }); }
   });
 
   // ------------------------------------------------------
@@ -279,22 +334,32 @@ app.post("/api/register-file", async (req, res) => {
   // ------------------------------------------------------
   // ZIP DOWNLOAD URL
   // ------------------------------------------------------
+  async function reportZipDownloadError(res, galleryId, error) {
+    if (error.rebuild) {
+      await db.run("UPDATE galleries SET zipReady = 0, zipError = 1 WHERE id = ?", [galleryId]);
+    }
+    res.setHeader("Cache-Control", "private, no-store");
+    if (error.contentRange) res.setHeader("Content-Range", error.contentRange);
+    res.status(error.status || 502).json({
+      error: error.message || "ZIP-Download fehlgeschlagen",
+      zipError: !!error.rebuild
+    });
+  }
+
   app.get("/api/download-zip/:id", async (req, res) => {
     const { id } = req.params;
-
-    const gallery = await db.get(
-      `SELECT * FROM galleries WHERE id = ?`,
-      [id]
-    );
-
-    if (!gallery)
-      return res.status(404).json({ error: "Gallery not found" });
-
-    if (!gallery.zipReady)
-      return res.status(400).json({ error: "ZIP not ready" });
-
-    if (gallery.expiresAt < Date.now()) return res.sendStatus(410);
-    res.json({ url: `/api/download-zip/${encodeURIComponent(id)}/file` });
+    try {
+      const gallery = await db.get("SELECT * FROM galleries WHERE id = ?", [id]);
+      if (!gallery) return res.status(404).json({ error: "Gallery not found" });
+      if (gallery.expiresAt < Date.now()) return res.sendStatus(410);
+      if (!gallery.zipReady) return res.status(409).json({ error: "ZIP nicht bereit", zipError: !!gallery.zipError });
+      // Check a few bytes before returning a download URL, so the gallery can
+      // show errors rather than saving a tiny JSON/HTML response as a ZIP.
+      const checked = await openZipDownload(id, { signal: AbortSignal.timeout(15000), range: "bytes=0-3" });
+      checked.body.destroy();
+      res.setHeader("Cache-Control", "private, no-store");
+      res.json({ url: `/api/download-zip/${encodeURIComponent(id)}/file` });
+    } catch (error) { await reportZipDownloadError(res, id, error); }
   });
 
   app.post("/api/retry-zip/:id", async (req, res) => {
@@ -320,14 +385,7 @@ app.post("/api/register-file", async (req, res) => {
       if (!gallery) return res.sendStatus(404);
       if (gallery.expiresAt < Date.now()) return res.sendStatus(410);
       if (!gallery.zipReady) return res.status(409).json({ error: "ZIP nicht bereit" });
-      const upstream = await fetch(getBunnyZipUrl(gallery.id), {
-        signal: controller.signal,
-        headers: req.headers.range ? { Range: req.headers.range } : {}
-      });
-      if (!upstream.ok) {
-        upstream.body?.destroy();
-        return res.status(502).json({ error: "ZIP-Speicher momentan nicht erreichbar" });
-      }
+      const upstream = await openZipDownload(gallery.id, { signal: controller.signal, range: req.headers.range });
       res.status(upstream.status);
       res.setHeader("X-Accel-Buffering", "no");
       res.setHeader("Content-Type", "application/zip");
@@ -338,7 +396,7 @@ app.post("/api/register-file", async (req, res) => {
       }
       await pipeline(upstream.body, res);
     } catch (error) {
-      if (!res.headersSent && !res.destroyed) res.status(502).json({ error: "ZIP-Download fehlgeschlagen" });
+      if (!res.headersSent && !res.destroyed) await reportZipDownloadError(res, req.params.id, error);
       else res.destroy();
     }
   });

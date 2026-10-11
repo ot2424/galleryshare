@@ -11,30 +11,37 @@ export default createZipBuilder({ initDb, getStreamFromR2, uploadZipToBunny });
 
 export function createZipBuilder({ initDb, getStreamFromR2, uploadZipToBunny }) {
   const jobs = new Map();
+  let queue = Promise.resolve();
 
   function createZipInBackground(galleryId) {
     if (jobs.has(galleryId)) return jobs.get(galleryId);
-    const job = buildZip(galleryId).finally(() => jobs.delete(galleryId));
+    const job = queue.then(() => buildZip(galleryId)).finally(() => jobs.delete(galleryId));
+    queue = job.catch(() => {});
     jobs.set(galleryId, job);
     return job;
   }
 
   async function buildZip(galleryId) {
     const db = await initDb();
-    const tempZipPath = path.join("/tmp", `gallery-${galleryId}.zip`);
+    const tempZipPath = path.join(process.env.ZIP_TEMP_DIR || "/tmp", `gallery-${galleryId}.zip`);
     let archive;
     let output;
-    const sources = [];
+    const sources = new Set();
     try {
       await db.run("UPDATE galleries SET zipReady = 0, zipError = 0, zipProgress = 0 WHERE id = ?", [galleryId]);
       const files = await db.all(
-        "SELECT filename, originalname FROM files WHERE galleryId = ? ORDER BY originalname COLLATE NOCASE",
+        "SELECT filename, originalname, sizeBytes FROM files WHERE galleryId = ? ORDER BY originalname COLLATE NOCASE",
         [galleryId]
       );
       if (!files.length) throw new Error("Keine Dateien fuer ZIP");
+      const space = await fs.promises.statfs(path.dirname(tempZipPath));
+      const estimatedSize = files.reduce((sum, file) => sum + (file.sizeBytes || 0), 0);
+      if (space.bavail * space.bsize < estimatedSize + 1024 ** 3) {
+        throw new Error("Nicht genügend freier Speicher für ZIP");
+      }
 
       output = fs.createWriteStream(tempZipPath);
-      archive = archiver("zip", { store: true });
+      archive = archiver("zip", { store: true, forceZip64: true });
       // Register completion before finalize: close may happen before finalize resolves.
       const completed = new Promise((resolve, reject) => {
         output.once("close", resolve);
@@ -57,11 +64,12 @@ export function createZipBuilder({ initDb, getStreamFromR2, uploadZipToBunny }) 
       let updates = Promise.resolve();
       for (const file of files) {
         const stream = await getStreamFromR2(file.filename);
-        sources.push(stream);
+        sources.add(stream);
         stream.once("error", error => archive.destroy(error));
         const entryWritten = once(archive, "entry");
         archive.append(stream, { name: getEntryName(file) });
         await Promise.race([entryWritten, completed.then(() => { throw new Error("ZIP stream closed prematurely"); })]);
+        sources.delete(stream);
       }
       await Promise.all([archive.finalize(), completed]);
       await updates;

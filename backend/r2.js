@@ -8,6 +8,7 @@ import {
   DeleteObjectCommand,
   PutObjectCommand,
   ListObjectsV2Command,
+  CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand,
   DeleteObjectsCommand
 } from "@aws-sdk/client-s3";
 
@@ -142,3 +143,16 @@ export async function deleteAllFromR2(prefix = "") {
   return deleted;
 }
 
+
+export async function beginMultipart(key, contentType) {
+  return r2.send(new CreateMultipartUploadCommand({ Bucket: R2_BUCKET, Key: key, ContentType: contentType }));
+}
+export async function signMultipartPart(key, uploadId, partNumber) {
+  return getSignedUrl(r2, new UploadPartCommand({ Bucket: R2_BUCKET, Key: key, UploadId: uploadId, PartNumber: partNumber }), { expiresIn: 3600 });
+}
+export async function finishMultipart(key, uploadId, parts) {
+  return r2.send(new CompleteMultipartUploadCommand({ Bucket: R2_BUCKET, Key: key, UploadId: uploadId, MultipartUpload: { Parts: parts } }));
+}
+export async function cancelMultipart(key, uploadId) {
+  return r2.send(new AbortMultipartUploadCommand({ Bucket: R2_BUCKET, Key: key, UploadId: uploadId }));
+}
