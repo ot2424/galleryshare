@@ -24,3 +24,18 @@ test('legacy files use registration order when dates are unavailable', () => {
   const files = [{ id: 3 }, { id: 1 }, { id: 2 }];
   assert.deepEqual(sortGalleryFiles(files).map(f => f.id), [1, 2, 3]);
 });
+
+test('the display limit is applied after sorting the entire gallery by date', () => {
+  const files = Array.from({ length: 120 }, (_, index) => ({
+    id: index + 1,
+    originalname: `IMG${index + 1}.jpg`,
+    lastModified: Date.UTC(2026, 0, 120 - index)
+  }));
+  const sorted = sortGalleryFiles(files);
+  assert.deepEqual(sorted.slice(0, 90).map(file => file.id),
+    Array.from({ length: 90 }, (_, index) => 120 - index));
+  assert.deepEqual(sorted.slice(0, 180).map(file => file.id),
+    Array.from({ length: 120 }, (_, index) => 120 - index));
+  assert.deepEqual(sortGalleryFiles(files, 'date-desc').slice(0, 90).map(file => file.id),
+    Array.from({ length: 90 }, (_, index) => index + 1));
+});

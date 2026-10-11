@@ -12,6 +12,7 @@ import { pipeline } from "node:stream/promises";
 import createZipInBackground from "./createZipInBackground.js";
 import { ensurePreview, isPreviewImage } from "./mediaPreview.js";
 import { isVideo, videoPreviews } from "./videoPreview.js";
+import { sortGalleryFiles } from "../frontend/src/lib/gallerySort.js";
 import {
   deleteFromR2,
   getSignedR2Url,
@@ -190,12 +191,11 @@ app.post("/api/register-file", async (req, res) => {
         return res.status(410).json({ error: "Link expired" });
       }
 
-      const files = await db.all(
+      const files = sortGalleryFiles(await db.all(
         `SELECT * FROM files
-         WHERE galleryId = ?
-         ORDER BY originalname COLLATE NOCASE`,
+         WHERE galleryId = ?`,
         [id]
-      );
+      ));
 
       const mediaTtl = Math.max(1, Math.ceil((gallery.expiresAt - Date.now()) / 1000));
       const filesWithUrls = await Promise.all(
